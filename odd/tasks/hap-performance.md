@@ -101,3 +101,24 @@ L7. Verification performed on the reference device (MiTV-AFMU0) with
 - explicit stop leaves no AceServe process, no sockets, phase=Stopped
 - `GET /aio` -> 200 with a valid M3U body; `GET /stat?action=get_status` -> 200 JSON
 - `uiautomator dump` still cannot reach idle (before and after); not claimed fixed
+
+L8. Delivery shape. The branch is deliberately larger than the ~400-line review
+slice: 5411 authored lines across 9 commits. Splitting further was rejected
+because the remaining units do not build independently (HapConfigActivity holds
+the T7 refresh and the updater UI in one file, and the updater's support classes
+must land before the activity that calls them). Review this branch **per commit**,
+not as one diff; the ordering above is the intended reading order, and every
+commit builds on its own except the noted activity/support-class pair.
+
+T8 outcome: native host suite (26 cases) and JVM updater-core suite (23 cases,
+`app/src/test`), the repo's first tests of either kind. JVM tests for the older
+Android-coupled classes (SourceValidator, PlaylistCatalog) were NOT added: they
+need Robolectric or a pure-logic extraction, which is a separate refactor.
+
+T10 verification on device (1.4.0 / versionCode 15 installed): the Updates panel
+renders in Spanish, is reachable and operable with the D-pad, and "Comprobar
+ahora" reaches the GitHub API and correctly reports no published releases for
+albersg/IPTV-Plugin-HaP. Still unverified on hardware: download progress and
+cancellation, certificate mismatch rejection, the PackageInstaller confirmation
+and its status broadcast, and the rate-limit path. Those need a published release
+signed with the fork's own key.
