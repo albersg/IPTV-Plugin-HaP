@@ -29,10 +29,11 @@ Do not migrate. Keep Java + Android Views.
    247 MB to flat/declining 116 → 107 MB, and threads stabilised at 23. A rewrite
    would have delivered the same result at far higher cost and risk.
 
-2. **`tv-foundation` is still beta.** The brief asks for stable, current APIs and
-   no deprecated components. A 1.0.0-beta01 foundation on the critical navigation
-   path trades a known-good focus model for an API that can still change shape.
-   That is the opposite of what was asked.
+2. **Correction: `tv-foundation` is NOT still beta.** This document originally
+   claimed it was, citing the `1.0.0-beta01` pin in `libs.versions.toml`. That was
+   wrong: Google Maven shows a stable `androidx.tv:tv-foundation` 1.0.0 and a
+   stable `androidx.tv:tv-material` 1.1.0. The pin is stale, not the library. The
+   API-stability objection is withdrawn.
 
 3. **The workload does not match what Compose TV is for.** One configuration
    screen with sections, switches, buttons and short lists is exactly the case

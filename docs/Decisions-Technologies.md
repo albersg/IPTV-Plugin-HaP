@@ -26,10 +26,20 @@ Measured baseline after the 1.4.x work: cold start 2084 ms, idle RSS 107 MB
   in TiviMate, OTT, StreamVault or a Cast receiver.
 - Persistence is SharedPreferences plus files (`PlaylistCatalog.PREFS_NAME`, the
   custom M3U file). No database.
-- Observed but unexplained: the running process carries `OkHttp Connecti…` and
-  `Okio Watchdog` threads, so OkHttp/Okio are on the runtime classpath
-  transitively from something. Nothing in HaP's source uses them. Worth
-  identifying before anyone claims the app "does not ship OkHttp".
+- **Unresolved observation, and it contradicts itself.** The running app process
+  shows threads named `OkHttp Connecti…` and `Okio Watchdog`, but the code does
+  not support that reading:
+  - `./gradlew :app:dependencyInsight --configuration armv7DebugRuntimeClasspath
+    --dependency okhttp` → "No dependencies matching given input were found".
+  - The release APK contains exactly one `classes.dex`, and it has no `okhttp3`,
+    `okio/` or `OkHttpClient` markers.
+
+  So OkHttp/Okio are **not** on this app's dependency graph. Either the thread
+  names belong to something else loaded into that process, or the observation was
+  misattributed (different PID at a different moment). No explanation is offered
+  because none has been established. The next diagnostic is to correlate those
+  thread ids with a stack sample (`debuggerd -b <tid>` or a Perfetto capture) on a
+  fresh process, rather than to keep asserting either way.
 
 ## Verdicts
 
@@ -58,14 +68,27 @@ per-task cancellation handles, which is what the implementation does.
 **Trigger to revisit:** adopting Kotlin for another reason first. Adopting
 coroutines *alone* would mean a Kotlin migration to obtain a nicety.
 
-### Compose for TV — reject
+### Compose for TV — reject, but not for the reason first given
 
-Decided separately in `docs/Decisions-UI-Toolkit.md`, with the reasons: the
-screen's defect was the 1 Hz full-view rebuild (fixed in place), `tv-foundation`
-is still `1.0.0-beta01` while stable APIs were requested, a single configuration
-screen does not match focus-driven browse surfaces, and a 32-bit 1.96 GB device
-gains nothing from a composition runtime here. That document also records its own
-limitation: no A/B benchmark was run.
+**Correction.** An earlier version of this document justified the rejection partly
+because "`tv-foundation` is still `1.0.0-beta01`". That was wrong. Checked against
+Google Maven: `androidx.tv:tv-foundation` has a **stable 1.0.0**, and
+`androidx.tv:tv-material` has a stable **1.1.0**. The `1.0.0-beta01` in
+`libs.versions.toml` is a stale pin in this repository, not the state of the
+library. That reason is withdrawn.
+
+The rejection now rests only on the reasons that are still true: the screen's
+measured defect was the 1 Hz full-view rebuild and was fixed in place; one
+configuration screen does not match focus-driven browse surfaces; and on a 32-bit
+1.96 GB device a composition runtime is a cost against no demonstrated gain for
+this screen. See `docs/Decisions-UI-Toolkit.md`.
+
+**Revised criterion (adopted from a reviewer, and correct):** keep Views only if
+they pass the navigation, focus and large-list requirements the brief actually
+asks for; reconsider Compose if it demonstrates a measurable improvement in user
+experience or maintainability. The D-pad work is the test that decides this — if
+Views cannot be made to navigate predictably, Compose becomes the better answer
+and this decision is void. That has not been demonstrated either way yet.
 
 ### libcurl Multi — **the one with a real functional gap**; targeted fix, not a rewrite
 
@@ -82,13 +105,33 @@ That is a real limitation, but it is a **capability** gap on an edge path, not t
 cause of any measured instability — AceStream serves the live stream over plain
 HTTP on the loopback AceServe port, which is the hot path.
 
-**Recommendation:** do not add libcurl for performance; that was never
-demonstrated and the current path handles the hot case. If HLS-over-HTTPS
-upstream is a supported scenario, the cheapest correct fix is to route those
-segments through the existing Java bridge (which already does HTTPS, redirects
-and `ETag`), or to add libcurl to that one path — decided by measuring, not by
-preference. **Trigger:** a reproducible case of a channel that only works with
-HTTPS segments.
+**Correction to an earlier claim in this document.** It previously said the
+cheapest fix was to "route those segments through the existing Java bridge (which
+already does HTTPS, redirects and ETag)". That was asserted without reading the
+bridge, and it is wrong. `NativeHttpBridge.fetchOnce` (line 64) does:
+
+```java
+String body = stream == null ? "" : new String(readAll(stream, 32 * 1024 * 1024), StandardCharsets.UTF_8);
+```
+
+It reads the **whole** body (32 MiB cap) and decodes it as UTF-8, returning a
+`String[]` to C++. That is fine for playlist and JSON text, which is what it was
+written for. It is unusable for binary MPEG-TS segments: UTF-8 decoding corrupts
+arbitrary bytes, and buffering a whole segment in memory defeats streaming.
+
+So the gap is wider than "HTTPS is rejected":
+
+- no binary-capable streaming path over TLS;
+- the native reader does not follow redirects the way a real HTTP client does;
+- HLS handling is a simplified playlist walk (first segment onward) without
+  master-playlist / variant-stream handling.
+
+**Recommendation, revised:** fixing this properly needs either a **byte-oriented**
+Java streaming bridge (a new path that hands chunks to JNI, not a `String`), or
+libcurl on that one path with redirect support. Both are real work, and both
+should be driven by a reproducible channel that only works over HTTPS — not done
+speculatively. **Trigger:** a reproducible HLS-over-HTTPS channel, and a stated
+scope of "broad HLS compatibility" if that is actually wanted.
 
 ### Asio / libuv / event-loop rewrite — reject
 
