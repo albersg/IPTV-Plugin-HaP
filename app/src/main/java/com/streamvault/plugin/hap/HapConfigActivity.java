@@ -5,10 +5,12 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -28,7 +30,18 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import com.jopsis.httpaceserveproxy.HapBridge;
+import com.jopsis.httpaceserveproxy.UpdateClient;
+import com.jopsis.httpaceserveproxy.UpdateDownloader;
+import com.jopsis.httpaceserveproxy.UpdateInstaller;
+import com.jopsis.httpaceserveproxy.UpdateSettings;
+import com.jopsis.httpaceserveproxy.UpdateVerifier;
+import com.jopsis.httpaceserveproxy.update.AppVersion;
+import com.jopsis.httpaceserveproxy.update.ReleaseAsset;
+import com.jopsis.httpaceserveproxy.update.ReleaseInfo;
+import com.jopsis.httpaceserveproxy.update.UpdateConfig;
+import com.jopsis.httpaceserveproxy.update.UpdateDecision;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -38,8 +51,11 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class HapConfigActivity extends Activity {
+    private static final long REFRESH_INTERVAL_MS = 1000L;
     private static final int COLOR_CANVAS = 0xFF07111B;
     private static final int COLOR_PANEL = 0xEE101B2B;
     private static final int COLOR_PANEL_SOFT = 0x99162435;
@@ -59,12 +75,24 @@ public class HapConfigActivity extends Activity {
     private static final int COLOR_TEXT_TERTIARY = 0xFF7F8DA5;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    /** Runs state refreshes, source/playlist changes and other user-triggered work. */
+    private final ExecutorService workExecutor = newSingleThread("hap-config-work");
+    /**
+     * Channel tests get their own single thread: a list test can spend up to ~8s per channel on a
+     * blocking peer check, and on the shared executor that blocked every other background action
+     * (refresh, source add/remove, playlist load) for the whole test, which read as a frozen UI.
+     */
+    private final ExecutorService channelTestExecutor = newSingleThread("hap-channel-test");
+    /** Reads {@link HapBridge#status} off the main thread for the 1s runtime poll. */
+    private final ExecutorService statusExecutor = newSingleThread("hap-runtime-status");
+    private final AtomicBoolean statusPollInFlight = new AtomicBoolean(false);
     private final Map<String, HapBridge.PeerResultInfo> peerResults = new HashMap<>();
     private final List<View> busyControls = new ArrayList<>();
 
-    private TextView statePill;
-    private TextView phasePill;
+    private Pill statePill;
+    private Pill phasePill;
+    private Pill aceServePill;
+    private Pill proxyPill;
     private TextView runtimeView;
     private LinearLayout runtimePillsContainer;
     private TextView errorView;
@@ -83,9 +111,11 @@ public class HapConfigActivity extends Activity {
     private Switch externalServerSwitch;
     private Switch lanSwitch;
     private Switch ipfsSwitch;
-    private TextView ipfsStatePill;
+    private Pill ipfsStatePill;
     private TextView ipfsErrorView;
     private LinearLayout ipfsGatewayContainer;
+    private TextView ipfsGatewayValueView;
+    private String ipfsGatewayValue = "";
     private Switch ipfsExternalSwitch;
     private LinearLayout ipfsExternalFieldsContainer;
     private EditText ipfsExternalHostEdit;
@@ -108,31 +138,92 @@ public class HapConfigActivity extends Activity {
     private String selectedPluginId;
     private String selectedChannelContentId;
     private int customEditingIndex = -1;
-    private Future<?> channelTestTask;
+    private volatile Future<?> channelTestTask;
+    private volatile HapBridge.PeerRequest inFlightPeerRequest;
     private volatile boolean cancelChannelTest;
+    private volatile boolean destroyed;
+    private List<EndpointModel> renderedEndpoints;
+    private String renderedLogText;
     private boolean suppressSwitchCallbacks;
+
+    /** Updater — own thread so a slow GitHub request never queues behind a channel test. */
+    private final ExecutorService updateExecutor = newSingleThread("hap-update");
+    private TextView updateInstalledView;
+    private Pill updateStatePill;
+    private Button updateCheckButton;
+    private Button updateAllowInstallsButton;
+    private Button updateDownloadButton;
+    private Button updateLaterButton;
+    private Button updateCancelButton;
+    private Button updateInstallButton;
+    private TextView updateDetailView;
+    private TextView updateNotesHeaderView;
+    private TextView updateNotesView;
+    private TextView updateProgressView;
+    private TextView updateFeedbackView;
+    private LinearLayout updateConfirmContainer;
+    private Switch updateAutomaticSwitch;
+    private Switch updatePrereleaseSwitch;
+    private EditText updateIntervalEdit;
+    private EditText updateRepositoryEdit;
+    private UpdateDecision currentUpdate;
+    private volatile File downloadedApk;
+    private volatile boolean updateCheckInFlight;
+    private volatile boolean updateDownloadInProgress;
+    private volatile AtomicBoolean updateCancelFlag = new AtomicBoolean(false);
+    private boolean suppressUpdateCallbacks;
+    private int lastUpdateProgressPercent = -1;
+    /** True when the user started the download from the action row, so init can take over focus. */
+    private boolean updateActionsHadFocus;
 
     private final Runnable refreshRunnable = new Runnable() {
         @Override
         public void run() {
+            if (destroyed) return;
             refreshRuntimeState();
-            handler.postDelayed(this, 1000);
+            handler.postDelayed(this, REFRESH_INTERVAL_MS);
         }
     };
+
+    private static ExecutorService newSingleThread(String name) {
+        return Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, name);
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(buildLayout());
         refreshConfigState();
-        refreshRuntimeState();
+        refreshRuntimeStateNow();
         populateIpfsAdvancedFields();
+        maybeRunAutomaticUpdateCheck();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        if (destroyed) return;
         refreshRunnable.run();
+        // The system installer owns the screen during an update, so its result is picked up here.
+        showPendingInstallResult();
+    }
+
+    /**
+     * Back cancels an in-flight update download instead of leaving it running behind a closing
+     * activity. Everything else keeps the default Back behaviour.
+     */
+    @SuppressWarnings("deprecation")
+    @Override
+    public void onBackPressed() {
+        if (updateDownloadInProgress) {
+            cancelUpdateDownload();
+            return;
+        }
+        super.onBackPressed();
     }
 
     @Override
@@ -143,8 +234,14 @@ public class HapConfigActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (channelTestTask != null) channelTestTask.cancel(true);
-        executor.shutdownNow();
+        // A stale posted callback must never resurrect the poll loop after teardown.
+        destroyed = true;
+        handler.removeCallbacksAndMessages(null);
+        abortChannelTest();
+        releaseUpdateResources();
+        statusExecutor.shutdownNow();
+        channelTestExecutor.shutdownNow();
+        workExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -180,6 +277,7 @@ public class HapConfigActivity extends Activity {
         root.addView(subtitle, matchWrap());
 
         root.addView(buildHeaderPanel(), matchWrap());
+        root.addView(buildUpdatePanel(), matchWrapTop(12));
         root.addView(buildExternalPlayersPanel(), matchWrapTop(12));
         root.addView(buildIpfsPanel(), matchWrapTop(12));
         root.addView(buildAioPanel(), matchWrapTop(12));
@@ -211,10 +309,10 @@ public class HapConfigActivity extends Activity {
         left.addView(titleRow, matchWrap());
 
         titleRow.addView(text(getString(R.string.screen_title), 24, COLOR_TEXT_PRIMARY, Typeface.BOLD));
-        statePill = pill(getString(R.string.status_stopped), COLOR_ERROR_MUTED, COLOR_ERROR);
-        titleRow.addView(statePill, wrapWrapLeft(10));
-        phasePill = pill(getString(R.string.status_idle), COLOR_SURFACE, COLOR_TEXT_SECONDARY);
-        titleRow.addView(phasePill, wrapWrapLeft(8));
+        statePill = new Pill(pill(getString(R.string.status_stopped), COLOR_ERROR_MUTED, COLOR_ERROR));
+        titleRow.addView(statePill.view, wrapWrapLeft(10));
+        phasePill = new Pill(pill(getString(R.string.status_idle), COLOR_SURFACE, COLOR_TEXT_SECONDARY));
+        titleRow.addView(phasePill.view, wrapWrapLeft(8));
 
         runtimePillsContainer = new LinearLayout(this);
         runtimePillsContainer.setOrientation(LinearLayout.HORIZONTAL);
@@ -222,7 +320,22 @@ public class HapConfigActivity extends Activity {
         runtimePillsContainer.setPadding(0, dp(10), 0, 0);
         left.addView(runtimePillsContainer, matchWrap());
 
-        runtimeView = text("", 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+        // Built once here and only re-labelled/re-coloured afterwards: rebuilding these pills on
+        // every refresh tick allocated a new TextView, layout and GradientDrawable per second.
+        aceServePill = new Pill(pill(
+                getString(R.string.label_aceserve) + " " + onlineLabel(false),
+                COLOR_ERROR_MUTED,
+                COLOR_ERROR
+        ));
+        runtimePillsContainer.addView(aceServePill.view, wrapWrap());
+        proxyPill = new Pill(pill(
+                getString(R.string.label_proxy) + " " + onlineLabel(false),
+                COLOR_ERROR_MUTED,
+                COLOR_ERROR
+        ));
+        runtimePillsContainer.addView(proxyPill.view, wrapWrapLeft(8));
+
+        runtimeView = text(HapBridge.LOCAL_AIO_URL, 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
         runtimeView.setSingleLine(true);
         runtimeView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
         runtimeView.setPadding(0, dp(8), 0, 0);
@@ -330,8 +443,8 @@ public class HapConfigActivity extends Activity {
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
         switchLeft.addView(titleRow, matchWrap());
         titleRow.addView(text(getString(R.string.label_ipfs_enable), 14, COLOR_TEXT_PRIMARY, Typeface.BOLD));
-        ipfsStatePill = pill(getString(R.string.status_ipfs_offline), COLOR_ERROR_MUTED, COLOR_ERROR);
-        titleRow.addView(ipfsStatePill, wrapWrapLeft(10));
+        ipfsStatePill = new Pill(pill(getString(R.string.status_ipfs_offline), COLOR_ERROR_MUTED, COLOR_ERROR));
+        titleRow.addView(ipfsStatePill.view, wrapWrapLeft(10));
 
         ipfsErrorView = text("", 12, COLOR_ERROR, Typeface.NORMAL);
         ipfsErrorView.setPadding(0, dp(4), 0, 0);
@@ -690,58 +803,840 @@ public class HapConfigActivity extends Activity {
         return panel.container;
     }
 
+    // ------------------------------------------------------------------ updates
+
+    /**
+     * The update section.
+     *
+     * <p>Every view is created once and afterwards only re-labelled or made visible: an
+     * asynchronous check or download must never rebuild the section, because removing the focused
+     * view would drop D-pad focus back to the top of the screen mid-flow.
+     */
+    private View buildUpdatePanel() {
+        PanelViews panel = panel(getString(R.string.section_updates), false, true);
+
+        updateInstalledView = text("", 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+        panel.body.addView(updateInstalledView, matchWrap());
+
+        LinearLayout statusRow = new LinearLayout(this);
+        statusRow.setOrientation(LinearLayout.HORIZONTAL);
+        statusRow.setGravity(Gravity.CENTER_VERTICAL);
+        statusRow.setPadding(0, dp(10), 0, 0);
+        panel.body.addView(scrollableControlRow(statusRow), matchWrap());
+
+        updateStatePill = new Pill(pill(getString(R.string.update_status_idle), COLOR_SURFACE, COLOR_TEXT_SECONDARY));
+        statusRow.addView(updateStatePill.view, wrapWrap());
+
+        updateCheckButton = button(getString(R.string.button_update_check));
+        updateCheckButton.setOnClickListener(v -> startUpdateCheck(true));
+        statusRow.addView(updateCheckButton, wrapWrapLeft(8));
+
+        updateAllowInstallsButton = smallButton(getString(R.string.button_update_open_settings));
+        updateAllowInstallsButton.setOnClickListener(v -> openUnknownSourcesSettings());
+        updateAllowInstallsButton.setVisibility(View.GONE);
+        statusRow.addView(updateAllowInstallsButton, wrapWrapLeft(8));
+
+        updateDetailView = text("", 13, COLOR_TEXT_PRIMARY, Typeface.BOLD);
+        updateDetailView.setPadding(0, dp(10), 0, 0);
+        updateDetailView.setVisibility(View.GONE);
+        panel.body.addView(updateDetailView, matchWrap());
+
+        updateNotesHeaderView = text(getString(R.string.update_notes_header), 12, COLOR_TEXT_TERTIARY, Typeface.BOLD);
+        updateNotesHeaderView.setPadding(0, dp(10), 0, 0);
+        updateNotesHeaderView.setVisibility(View.GONE);
+        panel.body.addView(updateNotesHeaderView, matchWrap());
+
+        updateNotesView = text("", 12, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+        updateNotesView.setPadding(0, dp(4), 0, 0);
+        updateNotesView.setMaxLines(8);
+        updateNotesView.setEllipsize(TextUtils.TruncateAt.END);
+        updateNotesView.setVisibility(View.GONE);
+        panel.body.addView(updateNotesView, matchWrap());
+
+        updateProgressView = text("", 13, COLOR_BRAND, Typeface.NORMAL);
+        updateProgressView.setPadding(0, dp(10), 0, 0);
+        updateProgressView.setVisibility(View.GONE);
+        panel.body.addView(updateProgressView, matchWrap());
+
+        updateFeedbackView = text("", 13, COLOR_ERROR, Typeface.NORMAL);
+        updateFeedbackView.setPadding(0, dp(8), 0, 0);
+        updateFeedbackView.setVisibility(View.GONE);
+        panel.body.addView(updateFeedbackView, matchWrap());
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.START);
+        actions.setPadding(0, dp(10), 0, 0);
+        panel.body.addView(scrollableControlRow(actions), matchWrap());
+
+        updateDownloadButton = button(getString(R.string.button_update_download));
+        updateDownloadButton.setOnClickListener(v -> startUpdateDownload());
+        updateDownloadButton.setVisibility(View.GONE);
+        actions.addView(updateDownloadButton, wrapWrap());
+
+        updateLaterButton = button(getString(R.string.button_update_later));
+        updateLaterButton.setOnClickListener(v -> postponeOfferedUpdate());
+        updateLaterButton.setVisibility(View.GONE);
+        actions.addView(updateLaterButton, wrapWrapLeft(8));
+
+        updateCancelButton = button(getString(R.string.button_update_cancel));
+        updateCancelButton.setOnClickListener(v -> cancelUpdateDownload());
+        updateCancelButton.setVisibility(View.GONE);
+        actions.addView(updateCancelButton, wrapWrapLeft(8));
+
+        updateConfirmContainer = new LinearLayout(this);
+        updateConfirmContainer.setOrientation(LinearLayout.VERTICAL);
+        updateConfirmContainer.setPadding(0, dp(10), 0, 0);
+        updateConfirmContainer.setVisibility(View.GONE);
+        panel.body.addView(updateConfirmContainer, matchWrap());
+
+        TextView installWarning = text(getString(R.string.update_confirm_warning), 12, COLOR_WARNING, Typeface.NORMAL);
+        installWarning.setPadding(dp(10), dp(10), dp(10), dp(10));
+        installWarning.setBackground(roundRect(COLOR_WARNING_MUTED, dp(10), dp(1), COLOR_WARNING));
+        updateConfirmContainer.addView(installWarning, matchWrap());
+
+        LinearLayout confirmRow = new LinearLayout(this);
+        confirmRow.setOrientation(LinearLayout.HORIZONTAL);
+        confirmRow.setPadding(0, dp(10), 0, 0);
+        updateConfirmContainer.addView(scrollableControlRow(confirmRow), matchWrap());
+
+        updateInstallButton = button(getString(R.string.button_update_install));
+        updateInstallButton.setOnClickListener(v -> confirmUpdateInstall());
+        confirmRow.addView(updateInstallButton, wrapWrap());
+
+        Button installLater = button(getString(R.string.button_update_later));
+        installLater.setOnClickListener(v -> postponeOfferedUpdate());
+        confirmRow.addView(installLater, wrapWrapLeft(8));
+
+        panel.body.addView(buildUpdateSettingsSection(), matchWrapTop(12));
+
+        refreshUpdateInstalledLabel();
+        populateUpdateSettingsFields();
+        return panel.container;
+    }
+
+    /**
+     * Wraps a horizontal row of controls so every control stays reachable with the D-pad on a
+     * narrow screen: focus scrolls the row instead of clipping the last button.
+     */
+    private View scrollableControlRow(LinearLayout row) {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setFocusable(false);
+        scroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        scroll.addView(row, new HorizontalScrollView.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+        return scroll;
+    }
+
+    /** Collapsible block with the automatic-check switch, interval, pre-releases and repository. */    private View buildUpdateSettingsSection() {
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+
+        String title = getString(R.string.update_label_advanced);
+        TextView header = text("+ " + title, 13, COLOR_TEXT_SECONDARY, Typeface.BOLD);
+        header.setFocusable(true);
+        header.setBackground(focusBackground(0x00000000, COLOR_SURFACE_FOCUSED, dp(8), 0, 0));
+        header.setPadding(dp(8), dp(8), dp(8), dp(8));
+        container.addView(header, matchWrap());
+
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setBackground(roundRect(COLOR_PANEL_SOFT, dp(10), 0, 0));
+        body.setPadding(dp(12), dp(12), dp(12), dp(12));
+        body.setVisibility(View.GONE);
+        LinearLayout.LayoutParams bodyParams = matchWrap();
+        bodyParams.topMargin = dp(6);
+        container.addView(body, bodyParams);
+
+        header.setOnClickListener(v -> {
+            boolean expanded = body.getVisibility() == View.VISIBLE;
+            body.setVisibility(expanded ? View.GONE : View.VISIBLE);
+            header.setText((expanded ? "+ " : "- ") + title);
+        });
+
+        LinearLayout automaticRow = new LinearLayout(this);
+        automaticRow.setOrientation(LinearLayout.HORIZONTAL);
+        automaticRow.setGravity(Gravity.CENTER_VERTICAL);
+        body.addView(automaticRow, matchWrap());
+
+        automaticRow.addView(
+                text(getString(R.string.update_label_automatic), 13, COLOR_TEXT_PRIMARY, Typeface.BOLD),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        );
+        updateAutomaticSwitch = new Switch(this);
+        updateAutomaticSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
+            if (suppressUpdateCallbacks) return;
+            UpdateSettings.setAutomaticCheckEnabled(this, checked);
+        });
+        busyControls.add(updateAutomaticSwitch);
+        automaticRow.addView(updateAutomaticSwitch, wrapWrap());
+
+        LinearLayout prereleaseRow = new LinearLayout(this);
+        prereleaseRow.setOrientation(LinearLayout.HORIZONTAL);
+        prereleaseRow.setGravity(Gravity.CENTER_VERTICAL);
+        prereleaseRow.setPadding(0, dp(10), 0, 0);
+        body.addView(prereleaseRow, matchWrap());
+
+        prereleaseRow.addView(
+                text(getString(R.string.update_label_prerelease), 13, COLOR_TEXT_PRIMARY, Typeface.BOLD),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        );
+        updatePrereleaseSwitch = new Switch(this);
+        updatePrereleaseSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
+            if (suppressUpdateCallbacks) return;
+            UpdateSettings.setIncludePrereleases(this, checked);
+        });
+        busyControls.add(updatePrereleaseSwitch);
+        prereleaseRow.addView(updatePrereleaseSwitch, wrapWrap());
+
+        updateIntervalEdit = editText(getString(R.string.update_label_interval), false);
+        updateIntervalEdit.setInputType(InputType.TYPE_CLASS_NUMBER);
+        LinearLayout.LayoutParams intervalParams = matchWrapTop(10);
+        body.addView(updateIntervalEdit, intervalParams);
+
+        updateRepositoryEdit = editText(getString(R.string.update_label_repository), false);
+        body.addView(updateRepositoryEdit, matchWrapTop(10));
+
+        LinearLayout saveRow = new LinearLayout(this);
+        saveRow.setOrientation(LinearLayout.HORIZONTAL);
+        saveRow.setGravity(Gravity.RIGHT);
+        saveRow.setPadding(0, dp(10), 0, 0);
+        body.addView(saveRow, matchWrap());
+
+        Button save = button(getString(R.string.button_update_save_settings));
+        save.setOnClickListener(v -> saveUpdateSettings());
+        saveRow.addView(save, wrapWrap());
+
+        return container;
+    }
+
+    private void populateUpdateSettingsFields() {
+        suppressUpdateCallbacks = true;
+        try {
+            updateAutomaticSwitch.setChecked(UpdateSettings.isAutomaticCheckEnabled(this));
+            updatePrereleaseSwitch.setChecked(UpdateSettings.includePrereleases(this));
+        } finally {
+            suppressUpdateCallbacks = false;
+        }
+        updateIntervalEdit.setText(String.valueOf(UpdateConfig.hours(UpdateSettings.checkIntervalMillis(this))));
+        updateRepositoryEdit.setText(UpdateSettings.repository(this));
+    }
+
+    private void saveUpdateSettings() {
+        String repository = updateRepositoryEdit.getText().toString().trim();
+        if (!repository.isEmpty() && !UpdateConfig.isValidRepository(repository)) {
+            setUpdatesFeedback(getString(R.string.update_error_repository_invalid), COLOR_ERROR);
+            return;
+        }
+        int hours;
+        try {
+            hours = Integer.parseInt(updateIntervalEdit.getText().toString().trim());
+        } catch (NumberFormatException error) {
+            hours = -1;
+        }
+        if (hours < 1 || hours > 168) {
+            setUpdatesFeedback(getString(R.string.update_error_interval_invalid), COLOR_ERROR);
+            return;
+        }
+        UpdateSettings.setRepository(this, repository);
+        UpdateSettings.setCheckIntervalMillis(this, UpdateConfig.intervalMillis(hours));
+        UpdateSettings.setIncludePrereleases(this, updatePrereleaseSwitch.isChecked());
+        UpdateSettings.setAutomaticCheckEnabled(this, updateAutomaticSwitch.isChecked());
+        populateUpdateSettingsFields();
+        setUpdatesFeedback(getString(R.string.update_message_settings_saved), COLOR_SUCCESS);
+    }
+
+    /** Lightweight automatic check: once per configured interval, never during a download. */
+    private void maybeRunAutomaticUpdateCheck() {
+        if (destroyed || updateCheckInFlight || updateDownloadInProgress) return;
+        if (!UpdateSettings.isAutomaticCheckDue(this, System.currentTimeMillis())) return;
+        startUpdateCheck(false);
+    }
+
+    private void startUpdateCheck(boolean manual) {
+        if (destroyed || updateCheckInFlight) return;
+        if (updateDownloadInProgress) {
+            setUpdatesFeedback(getString(R.string.update_error_download_running), COLOR_WARNING);
+            return;
+        }
+        updateCheckInFlight = true;
+        updateCheckButton.setEnabled(false);
+        updateStatePill.apply(getString(R.string.update_status_checking), COLOR_BRAND_MUTED, COLOR_BRAND);
+        setUpdatesFeedback(getString(R.string.update_message_checking), COLOR_TEXT_SECONDARY);
+        try {
+            updateExecutor.execute(() -> {
+                UpdateClient.Result result = UpdateClient.check(this);
+                UpdateSettings.setLastCheckMillis(this, System.currentTimeMillis());
+                main(() -> applyUpdateCheckResult(result, manual));
+            });
+        } catch (RejectedExecutionException error) {
+            updateCheckInFlight = false;
+            updateCheckButton.setEnabled(true);
+            setUpdatesFeedback(errorMessage(error), COLOR_ERROR);
+        }
+    }
+
+    private void applyUpdateCheckResult(UpdateClient.Result result, boolean manual) {
+        updateCheckInFlight = false;
+        updateCheckButton.setEnabled(true);
+        if (destroyed) return;
+
+        if (result.outcome != UpdateClient.Outcome.OK) {
+            currentUpdate = null;
+            updateStatePill.apply(getString(R.string.update_status_error), COLOR_ERROR_MUTED, COLOR_ERROR);
+            setUpdatesFeedback(result.message, COLOR_ERROR);
+            hideUpdateDetails();
+            return;
+        }
+
+        UpdateDecision decision = UpdateDecision.decide(
+                result.releases,
+                installedVersion(),
+                deviceAbis(),
+                UpdateSettings.includePrereleases(this)
+        );
+        currentUpdate = decision;
+        if (!result.fromCache) setUpdatesFeedback("", COLOR_TEXT_SECONDARY);
+
+        switch (decision.status()) {
+            case UPDATE_AVAILABLE: {
+                boolean postponed = !manual && UpdateSettings.isPostponed(
+                        this,
+                        decision.release().versionName(),
+                        decision.release().announcedVersionCode()
+                );
+                showUpdateOffer(decision, postponed);
+                if (result.fromCache) setUpdatesFeedback(result.message, COLOR_WARNING);
+                break;
+            }
+            case NO_COMPATIBLE_ASSET:
+                hideUpdateDetails();
+                updateStatePill.apply(getString(R.string.update_status_no_asset), COLOR_WARNING_MUTED, COLOR_WARNING);
+                setUpdatesFeedback(getString(R.string.update_error_no_asset, deviceAbisSummary()), COLOR_WARNING);
+                break;
+            case ONLY_PRERELEASES:
+                hideUpdateDetails();
+                updateStatePill.apply(getString(R.string.update_status_up_to_date), COLOR_SUCCESS_MUTED, COLOR_SUCCESS);
+                setUpdatesFeedback(getString(R.string.update_error_only_prereleases), COLOR_TEXT_SECONDARY);
+                break;
+            case NO_RELEASES:
+                hideUpdateDetails();
+                updateStatePill.apply(getString(R.string.update_status_error), COLOR_WARNING_MUTED, COLOR_WARNING);
+                setUpdatesFeedback(getString(R.string.update_error_no_releases), COLOR_WARNING);
+                break;
+            case DOWNGRADE_REFUSED:
+            case UP_TO_DATE:
+            default:
+                hideUpdateDetails();
+                updateStatePill.apply(getString(R.string.update_status_up_to_date), COLOR_SUCCESS_MUTED, COLOR_SUCCESS);
+                break;
+        }
+    }
+
+    private void showUpdateOffer(UpdateDecision decision, boolean postponed) {
+        ReleaseInfo release = decision.release();
+        ReleaseAsset asset = decision.asset();
+        if (release == null || asset == null) return;
+
+        boolean prerelease = release.isPrerelease();
+        updateStatePill.apply(
+                postponed
+                        ? getString(R.string.update_status_postponed)
+                        : prerelease
+                        ? getString(R.string.update_status_prerelease)
+                        : getString(R.string.update_status_available),
+                postponed ? COLOR_SURFACE : COLOR_WARNING_MUTED,
+                postponed ? COLOR_TEXT_SECONDARY : COLOR_WARNING
+        );
+
+        StringBuilder detail = new StringBuilder();
+        detail.append(release.announcedVersionCode() > 0
+                ? getString(R.string.update_detail_available, release.versionName(), release.announcedVersionCode())
+                : getString(R.string.update_detail_available_no_code, release.versionName()));
+        detail.append('\n').append(prerelease
+                ? getString(R.string.update_detail_channel_prerelease)
+                : getString(R.string.update_detail_channel_stable));
+        detail.append('\n').append(getString(
+                R.string.update_detail_size,
+                UpdateDownloader.formatBytes(asset.sizeBytes()),
+                asset.name()
+        ));
+        updateDetailView.setText(detail.toString());
+        updateDetailView.setVisibility(View.VISIBLE);
+
+        String notes = truncateNotes(release.notes());
+        boolean hasNotes = !notes.isEmpty();
+        updateNotesHeaderView.setVisibility(hasNotes ? View.VISIBLE : View.GONE);
+        updateNotesView.setText(hasNotes ? notes : "");
+        updateNotesView.setVisibility(hasNotes ? View.VISIBLE : View.GONE);
+
+        updateDownloadButton.setVisibility(postponed ? View.GONE : View.VISIBLE);
+        updateLaterButton.setVisibility(postponed ? View.GONE : View.VISIBLE);
+        updateCancelButton.setVisibility(View.GONE);
+        updateConfirmContainer.setVisibility(View.GONE);
+        updateProgressView.setVisibility(View.GONE);
+    }
+
+    /** Long release bodies are cut so the D-pad does not have to scroll past a wall of text. */
+    private String truncateNotes(String notes) {
+        String value = notes == null ? "" : notes.trim();
+        int limit = 1200;
+        if (value.length() <= limit) return value;
+        return value.substring(0, limit).trim() + "\n" + getString(R.string.update_notes_truncated);
+    }
+
+    /** Hides the offer and its details but keeps the status pill and the message area. */
+    private void hideUpdateDetails() {
+        hideControl(updateDownloadButton, null);
+        hideControl(updateLaterButton, null);
+        hideControl(updateCancelButton, updateCheckButton);
+        updateConfirmContainer.setVisibility(View.GONE);
+        updateProgressView.setVisibility(View.GONE);
+        updateDetailView.setText("");
+        updateDetailView.setVisibility(View.GONE);
+        updateNotesView.setText("");
+        updateNotesView.setVisibility(View.GONE);
+        updateNotesHeaderView.setVisibility(View.GONE);
+    }
+
+    private void startUpdateDownload() {
+        if (currentUpdate == null || !currentUpdate.hasUpdate() || updateDownloadInProgress) return;
+        ReleaseAsset asset = currentUpdate.asset();
+        if (asset == null) return;
+
+        if (!UpdateInstaller.canInstallPackages(this)) {
+            updateAllowInstallsButton.setVisibility(View.VISIBLE);
+            setUpdatesFeedback(getString(R.string.update_error_install_permission), COLOR_WARNING);
+            return;
+        }
+        updateAllowInstallsButton.setVisibility(View.GONE);
+
+        updateDownloadInProgress = true;
+        updateCancelFlag = new AtomicBoolean(false);
+        lastUpdateProgressPercent = -1;
+        updateActionsHadFocus = updateDownloadButton.hasFocus() || updateLaterButton.hasFocus();
+        downloadedApk = null;
+        updateCheckButton.setEnabled(false);
+        updateConfirmContainer.setVisibility(View.GONE);
+        updateCancelButton.setVisibility(View.VISIBLE);
+        hideControl(updateDownloadButton, updateCancelButton);
+        hideControl(updateLaterButton, null);
+        updateProgressView.setText(getString(R.string.update_message_downloading));
+        updateProgressView.setVisibility(View.VISIBLE);
+        setUpdatesFeedback("", COLOR_TEXT_SECONDARY);
+
+        try {
+            updateExecutor.execute(() -> {
+                UpdateDownloader.Result result = UpdateDownloader.download(
+                        this, asset, updateCancelFlag, this::onUpdateDownloadProgress);
+                main(() -> applyUpdateDownloadResult(result));
+            });
+        } catch (RejectedExecutionException error) {
+            updateDownloadInProgress = false;
+            updateCheckButton.setEnabled(true);
+            setUpdatesFeedback(errorMessage(error), COLOR_ERROR);
+        }
+    }
+
+    private void onUpdateDownloadProgress(int percent, long receivedBytes, long totalBytes) {
+        if (destroyed) return;
+        int clamped = Math.max(0, Math.min(100, percent));
+        if (clamped == lastUpdateProgressPercent) return;
+        lastUpdateProgressPercent = clamped;
+        main(() -> {
+            if (destroyed || !updateDownloadInProgress) return;
+            updateProgressView.setText(getString(
+                    R.string.update_progress_format,
+                    clamped,
+                    UpdateDownloader.formatBytes(receivedBytes),
+                    UpdateDownloader.formatBytes(totalBytes)
+            ));
+        });
+    }
+
+    private void applyUpdateDownloadResult(UpdateDownloader.Result result) {
+        updateDownloadInProgress = false;
+        updateCheckButton.setEnabled(true);
+        updateCancelButton.setVisibility(View.GONE);
+        if (destroyed) return;
+
+        if (!result.success) {
+            updateProgressView.setVisibility(View.GONE);
+            if (!result.cancelled) {
+                updateStatePill.apply(getString(R.string.update_status_error), COLOR_ERROR_MUTED, COLOR_ERROR);
+            }
+            setUpdatesFeedback(result.message, result.cancelled ? COLOR_WARNING : COLOR_ERROR);
+            boolean offerStillValid = currentUpdate != null && currentUpdate.hasUpdate();
+            updateDownloadButton.setEnabled(true);
+            updateDownloadButton.setVisibility(offerStillValid ? View.VISIBLE : View.GONE);
+            updateLaterButton.setVisibility(offerStillValid ? View.VISIBLE : View.GONE);
+            return;
+        }
+
+        updateDownloadButton.setEnabled(true);
+        updateDownloadButton.setVisibility(View.GONE);
+        updateLaterButton.setVisibility(View.GONE);
+        updateProgressView.setText(getString(R.string.update_verifying));
+        updateProgressView.setVisibility(View.VISIBLE);
+        downloadedApk = result.file;
+        verifyDownloadedApk(result.file);
+    }
+
+    private void verifyDownloadedApk(File file) {
+        int announced = currentUpdate != null && currentUpdate.release() != null
+                ? currentUpdate.release().announcedVersionCode()
+                : 0;
+        int minimumVersionCode = Math.max(announced, installedVersionCode());
+        try {
+            updateExecutor.execute(() -> {
+                UpdateVerifier.Result verification = UpdateVerifier.verify(this, file, minimumVersionCode);
+                main(() -> applyUpdateVerification(file, verification));
+            });
+        } catch (RejectedExecutionException error) {
+            updateProgressView.setVisibility(View.GONE);
+            setUpdatesFeedback(errorMessage(error), COLOR_ERROR);
+        }
+    }
+
+    private void applyUpdateVerification(File file, UpdateVerifier.Result verification) {
+        updateProgressView.setVisibility(View.GONE);
+        if (destroyed) return;
+
+        if (!verification.ok) {
+            UpdateDownloader.delete(file);
+            downloadedApk = null;
+            updateStatePill.apply(getString(R.string.update_status_error), COLOR_ERROR_MUTED, COLOR_ERROR);
+            setUpdatesFeedback(verification.message, COLOR_ERROR);
+            // A wrong signing key is final: re-downloading the same asset cannot fix it, and the
+            // user must not be nudged towards uninstalling to force it through.
+            boolean retryable = !verification.signatureMismatch;
+            updateDownloadButton.setEnabled(retryable);
+            updateDownloadButton.setVisibility(retryable ? View.VISIBLE : View.GONE);
+            updateLaterButton.setVisibility(retryable ? View.VISIBLE : View.GONE);
+            return;
+        }
+
+        updateStatePill.apply(getString(R.string.update_status_available), COLOR_WARNING_MUTED, COLOR_WARNING);
+        setUpdatesFeedback(getString(R.string.update_verified), COLOR_SUCCESS);
+        updateConfirmContainer.setVisibility(View.VISIBLE);
+        // The confirmation is the next D-pad step: take focus only when the download was started
+        // from the action row, never while the user is somewhere else on the screen.
+        if (updateActionsHadFocus) {
+            updateActionsHadFocus = false;
+            updateInstallButton.requestFocus();
+        }
+    }
+
+    /** Stops HaP (only after the user confirmed) and hands the verified APK to the installer. */
+    private void confirmUpdateInstall() {
+        final File apk = downloadedApk;
+        updateConfirmContainer.setVisibility(View.GONE);
+        if (apk == null || !apk.isFile()) {
+            downloadedApk = null;
+            return;
+        }
+
+        updateInstallButton.setEnabled(false);
+        setUpdatesFeedback(getString(R.string.update_message_stopping_hap), COLOR_TEXT_SECONDARY);
+        try {
+            updateExecutor.execute(() -> {
+                HapBridge.HapStatus status = HapBridge.status(this);
+                if (status.desiredRunning || status.proxyRunning) HapBridge.stop(this);
+                UpdateInstaller.install(this, apk, new UpdateInstaller.Callback() {
+                    @Override
+                    public void onSessionOpened() {
+                        main(() -> {
+                            downloadedApk = null;
+                            updateInstallButton.setEnabled(true);
+                            setUpdatesFeedback(getString(R.string.update_message_install_sent), COLOR_BRAND);
+                        });
+                    }
+
+                    @Override
+                    public void onSessionFailed(String message) {
+                        main(() -> {
+                            updateInstallButton.setEnabled(true);
+                            setUpdatesFeedback(message, COLOR_ERROR);
+                        });
+                    }
+                });
+            });
+        } catch (RejectedExecutionException error) {
+            updateInstallButton.setEnabled(true);
+            setUpdatesFeedback(errorMessage(error), COLOR_ERROR);
+        }
+    }
+
+    private void postponeOfferedUpdate() {
+        if (currentUpdate == null || currentUpdate.release() == null) return;
+        if (updateDownloadInProgress) cancelUpdateDownload();
+        ReleaseInfo release = currentUpdate.release();
+        UpdateSettings.setPostponed(this, release.versionName(), release.announcedVersionCode());
+        updateActionsHadFocus = false;
+        if (downloadedApk != null) {
+            UpdateDownloader.delete(downloadedApk);
+            downloadedApk = null;
+        }
+        updateConfirmContainer.setVisibility(View.GONE);
+        hideControl(updateDownloadButton, null);
+        hideControl(updateLaterButton, null);
+        updateProgressView.setVisibility(View.GONE);
+        updateStatePill.apply(getString(R.string.update_status_postponed), COLOR_SURFACE, COLOR_TEXT_SECONDARY);
+        setUpdatesFeedback(getString(R.string.update_message_postponed), COLOR_TEXT_SECONDARY);
+    }
+
+    private void cancelUpdateDownload() {
+        updateCancelFlag.set(true);
+        updateCancelButton.setVisibility(View.GONE);
+        setUpdatesFeedback(getString(R.string.update_error_download_cancelled), COLOR_WARNING);
+    }
+
+    /** Reports the installer outcome stored by {@code UpdateInstallReceiver}. */
+    private void showPendingInstallResult() {
+        if (updateAllowInstallsButton != null && UpdateInstaller.canInstallPackages(this)) {
+            updateAllowInstallsButton.setVisibility(View.GONE);
+        }
+
+        int status = UpdateSettings.installStatus(this);
+        if (status == UpdateSettings.NO_INSTALL_STATUS) return;
+        UpdateSettings.clearInstallStatus(this);
+
+        if (status == PackageInstaller.STATUS_SUCCESS) {
+            refreshUpdateInstalledLabel();
+            updateStatePill.apply(getString(R.string.update_status_up_to_date), COLOR_SUCCESS_MUTED, COLOR_SUCCESS);
+            setUpdatesFeedback(getString(R.string.update_install_success), COLOR_SUCCESS);
+            return;
+        }
+        if (status == PackageInstaller.STATUS_FAILURE_ABORTED) {
+            setUpdatesFeedback(getString(R.string.update_install_aborted), COLOR_WARNING);
+            return;
+        }
+        if (status == PackageInstaller.STATUS_FAILURE_BLOCKED) {
+            updateAllowInstallsButton.setVisibility(View.VISIBLE);
+            setUpdatesFeedback(getString(R.string.update_install_failed_blocked), COLOR_ERROR);
+            return;
+        }
+        setUpdatesFeedback(getString(R.string.update_install_failed, status), COLOR_ERROR);
+    }
+
+    private void openUnknownSourcesSettings() {
+        try {
+            startActivity(UpdateInstaller.unknownSourcesSettingsIntent(this));
+        } catch (RuntimeException error) {
+            setUpdatesFeedback(errorMessage(error), COLOR_ERROR);
+        }
+    }
+
+    private void releaseUpdateResources() {
+        updateCancelFlag.set(true);
+        updateExecutor.shutdownNow();
+        if (downloadedApk != null) {
+            UpdateDownloader.delete(downloadedApk);
+            downloadedApk = null;
+        }
+    }
+
+    private void setUpdatesFeedback(String message, int color) {
+        if (updateFeedbackView == null) return;
+        if (message == null || message.trim().isEmpty()) {
+            updateFeedbackView.setText("");
+            updateFeedbackView.setVisibility(View.GONE);
+            return;
+        }
+        updateFeedbackView.setTextColor(color);
+        updateFeedbackView.setText(message);
+        updateFeedbackView.setVisibility(View.VISIBLE);
+    }
+
+    /** Hides a control, and moves focus to a neighbour when the hidden one held it. */
+    private void hideControl(View control, View focusFallback) {
+        if (control == null) return;
+        boolean focused = control.hasFocus();
+        control.setEnabled(true);
+        control.setVisibility(View.GONE);
+        if (focused && focusFallback != null && focusFallback.getVisibility() == View.VISIBLE) {
+            focusFallback.requestFocus();
+        }
+    }
+
+    private void refreshUpdateInstalledLabel() {
+        if (updateInstalledView == null) return;
+        updateInstalledView.setText(getString(
+                R.string.update_installed_format,
+                appVersionName(),
+                installedVersionCode(),
+                deviceAbisSummary()
+        ));
+    }
+
+    private AppVersion installedVersion() {
+        return new AppVersion(installedVersionCode(), appVersionName());
+    }
+
+    @SuppressWarnings("deprecation")
+    private int installedVersionCode() {
+        try {
+            PackageInfo packageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return (int) packageInfo.getLongVersionCode();
+            return packageInfo.versionCode;
+        } catch (PackageManager.NameNotFoundException ignored) {
+            return 0;
+        }
+    }
+
+    /** The device's real ABI list, in Android's priority order. */
+    private List<String> deviceAbis() {
+        List<String> abis = new ArrayList<>();
+        String[] supported = Build.SUPPORTED_ABIS;
+        if (supported == null) return abis;
+        for (String abi : supported) {
+            if (abi == null) continue;
+            String value = abi.trim();
+            if (!value.isEmpty()) abis.add(value);
+        }
+        return abis;
+    }
+
+    private String deviceAbisSummary() {
+        return TextUtils.join(", ", deviceAbis());
+    }
+
+    /**
+     * First paint only: reads the status on the calling (main) thread, so the screen never shows a
+     * placeholder state that is immediately replaced. Every later refresh runs off the main thread.
+     */
+    private void refreshRuntimeStateNow() {
+        applyRuntimeSnapshot(buildRuntimeSnapshot(HapBridge.status(this)));
+    }
+
+    /**
+     * Schedules a runtime state read. {@code HapBridge.status} copies the whole service log under
+     * {@link com.jopsis.httpaceserveproxy.ServiceState}'s lock, reads SharedPreferences and (in LAN
+     * mode) enumerates the network interfaces, so it runs on {@link #statusExecutor} and the result
+     * is applied on the main thread. At most one read is in flight, so a slow read can never pile
+     * up a queue of ticks.
+     */
     private void refreshRuntimeState() {
-        HapBridge.HapStatus status = HapBridge.status(this);
+        if (destroyed) return;
+        if (!statusPollInFlight.compareAndSet(false, true)) return;
+        try {
+            statusExecutor.execute(this::readRuntimeState);
+        } catch (RejectedExecutionException ignored) {
+            statusPollInFlight.set(false);
+        }
+    }
+
+    private void readRuntimeState() {
+        RuntimeSnapshot snapshot = null;
+        try {
+            snapshot = buildRuntimeSnapshot(HapBridge.status(this));
+        } catch (Throwable ignored) {
+            // A failed status read must not stop the 1s refresh loop.
+        } finally {
+            statusPollInFlight.set(false);
+        }
+        if (snapshot == null) return;
+        RuntimeSnapshot ready = snapshot;
+        main(() -> applyRuntimeSnapshot(ready));
+    }
+
+    private RuntimeSnapshot buildRuntimeSnapshot(HapBridge.HapStatus status) {
+        RuntimeSnapshot snapshot = new RuntimeSnapshot();
+
         RuntimeBadge badge = runtimeBadge(status);
+        snapshot.stateLabel = badge.label;
+        snapshot.stateBackgroundColor = badge.containerColor;
+        snapshot.stateTextColor = badge.contentColor;
 
-        statePill.setText(badge.label);
-        statePill.setTextColor(badge.contentColor);
-        statePill.setBackground(roundRect(badge.containerColor, dp(999), 0, 0));
+        snapshot.phaseLabel = displayPhase(status.phase);
+        snapshot.phaseBackgroundColor = status.proxyRunning ? COLOR_BRAND_MUTED : COLOR_SURFACE;
+        snapshot.phaseTextColor = status.proxyRunning ? COLOR_BRAND : COLOR_TEXT_SECONDARY;
 
-        phasePill.setText(displayPhase(status.phase));
-        phasePill.setTextColor(status.proxyRunning ? COLOR_BRAND : COLOR_TEXT_SECONDARY);
-        phasePill.setBackground(roundRect(status.proxyRunning ? COLOR_BRAND_MUTED : COLOR_SURFACE, dp(999), 0, 0));
+        snapshot.aceServeLabel = getString(R.string.label_aceserve) + " " + onlineLabel(status.aceRunning);
+        snapshot.aceServeBackgroundColor = status.aceRunning ? COLOR_SUCCESS_MUTED : COLOR_ERROR_MUTED;
+        snapshot.aceServeTextColor = status.aceRunning ? COLOR_SUCCESS : COLOR_ERROR;
 
-        runtimePillsContainer.removeAllViews();
-        runtimePillsContainer.addView(statusPill(
-                getString(R.string.label_aceserve) + " " + onlineLabel(status.aceRunning),
-                status.aceRunning
-        ), wrapWrap());
-        runtimePillsContainer.addView(statusPill(
-                getString(R.string.label_proxy) + " " + onlineLabel(status.proxyRunning),
-                status.proxyRunning
-        ), wrapWrapLeft(8));
+        snapshot.proxyLabel = getString(R.string.label_proxy) + " " + onlineLabel(status.proxyRunning);
+        snapshot.proxyBackgroundColor = status.proxyRunning ? COLOR_SUCCESS_MUTED : COLOR_ERROR_MUTED;
+        snapshot.proxyTextColor = status.proxyRunning ? COLOR_SUCCESS : COLOR_ERROR;
 
-        runtimeView.setText(HapBridge.LOCAL_AIO_URL);
+        snapshot.errorText = status.lastError;
 
-        if (status.lastError.isEmpty()) {
-            errorView.setVisibility(View.GONE);
-        } else {
-            errorView.setText(status.lastError);
-            errorView.setVisibility(View.VISIBLE);
+        snapshot.desiredRunning = status.desiredRunning;
+        snapshot.externalPlayerServerEnabled = status.externalPlayerServerEnabled;
+        snapshot.lanModeEnabled = status.serverModeEnabled;
+        snapshot.ipfsEnabled = status.ipfsEnabled;
+
+        RuntimeBadge ipfs = ipfsBadge(status);
+        snapshot.ipfsLabel = ipfs.label;
+        snapshot.ipfsBackgroundColor = ipfs.containerColor;
+        snapshot.ipfsTextColor = ipfs.contentColor;
+        snapshot.ipfsErrorText = status.ipfsError;
+        snapshot.ipfsGatewayUrl = status.ipfsGatewayUrl;
+
+        snapshot.endpoints = endpointRows(status);
+        snapshot.logText = runtimeLogText(status.log);
+        return snapshot;
+    }
+
+    /** Applies a snapshot, touching only the views whose value actually changed. */
+    private void applyRuntimeSnapshot(RuntimeSnapshot snapshot) {
+        if (destroyed) return;
+
+        statePill.apply(snapshot.stateLabel, snapshot.stateBackgroundColor, snapshot.stateTextColor);
+        phasePill.apply(snapshot.phaseLabel, snapshot.phaseBackgroundColor, snapshot.phaseTextColor);
+        aceServePill.apply(
+                snapshot.aceServeLabel,
+                snapshot.aceServeBackgroundColor,
+                snapshot.aceServeTextColor
+        );
+        proxyPill.apply(
+                snapshot.proxyLabel,
+                snapshot.proxyBackgroundColor,
+                snapshot.proxyTextColor
+        );
+
+        applyCaption(errorView, snapshot.errorText);
+        applySwitches(snapshot);
+
+        ipfsStatePill.apply(snapshot.ipfsLabel, snapshot.ipfsBackgroundColor, snapshot.ipfsTextColor);
+        applyCaption(ipfsErrorView, snapshot.ipfsErrorText);
+        applyIpfsGateway(snapshot.ipfsGatewayUrl);
+
+        if (!sameEndpoints(renderedEndpoints, snapshot.endpoints)) renderEndpoints(snapshot.endpoints);
+
+        if (!TextUtils.equals(renderedLogText, snapshot.logText)) {
+            renderedLogText = snapshot.logText;
+            logView.setText(snapshot.logText);
         }
+    }
 
+    private void applyCaption(TextView view, String text) {
+        boolean visible = text != null && !text.isEmpty();
+        if (visible && !TextUtils.equals(text, view.getText())) view.setText(text);
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        if (view.getVisibility() != visibility) view.setVisibility(visibility);
+    }
+
+    private void applySwitches(RuntimeSnapshot snapshot) {
+        if (enabledSwitch.isChecked() == snapshot.desiredRunning
+                && externalServerSwitch.isChecked() == snapshot.externalPlayerServerEnabled
+                && lanSwitch.isChecked() == snapshot.lanModeEnabled
+                && ipfsSwitch.isChecked() == snapshot.ipfsEnabled) {
+            return;
+        }
         suppressSwitchCallbacks = true;
-        enabledSwitch.setChecked(status.desiredRunning);
-        externalServerSwitch.setChecked(status.externalPlayerServerEnabled);
-        lanSwitch.setChecked(status.serverModeEnabled);
-        ipfsSwitch.setChecked(status.ipfsEnabled);
-        suppressSwitchCallbacks = false;
-
-        RuntimeBadge ipfsBadge = ipfsBadge(status);
-        ipfsStatePill.setText(ipfsBadge.label);
-        ipfsStatePill.setTextColor(ipfsBadge.contentColor);
-        ipfsStatePill.setBackground(roundRect(ipfsBadge.containerColor, dp(999), 0, 0));
-        if (status.ipfsError.isEmpty()) {
-            ipfsErrorView.setVisibility(View.GONE);
-        } else {
-            ipfsErrorView.setText(status.ipfsError);
-            ipfsErrorView.setVisibility(View.VISIBLE);
+        try {
+            enabledSwitch.setChecked(snapshot.desiredRunning);
+            externalServerSwitch.setChecked(snapshot.externalPlayerServerEnabled);
+            lanSwitch.setChecked(snapshot.lanModeEnabled);
+            ipfsSwitch.setChecked(snapshot.ipfsEnabled);
+        } finally {
+            suppressSwitchCallbacks = false;
         }
-        renderIpfsGateway(status);
-
-        renderEndpoints(status);
-        renderLogs(status);
     }
 
     private RuntimeBadge ipfsBadge(HapBridge.HapStatus status) {
@@ -763,25 +1658,46 @@ public class HapConfigActivity extends Activity {
         renderSources();
     }
 
-    private void renderEndpoints(HapBridge.HapStatus status) {
-        endpointsContainer.removeAllViews();
+    /** Computed off the main thread; the LAN URLs come from the same status read. */
+    private List<EndpointModel> endpointRows(HapBridge.HapStatus status) {
+        List<EndpointModel> rows = new ArrayList<>();
         List<String> shown = new ArrayList<>();
-        addEndpointRow(getString(R.string.label_local_m3u), HapBridge.LOCAL_AIO_URL, shown);
-        addEndpointRow(getString(R.string.label_local_epg), HapBridge.LOCAL_AIO_EPG_URL, shown);
+        addEndpointRow(rows, shown, getString(R.string.label_local_m3u), HapBridge.LOCAL_AIO_URL);
+        addEndpointRow(rows, shown, getString(R.string.label_local_epg), HapBridge.LOCAL_AIO_EPG_URL);
         String castUrl = HapBridge.castAioUrl(this);
         String castEpgUrl = HapBridge.castAioEpgUrl(this);
-        if (!castUrl.isEmpty()) addEndpointRow(getString(R.string.label_lan_m3u), castUrl, shown);
-        if (!castEpgUrl.isEmpty()) addEndpointRow(getString(R.string.label_lan_epg), castEpgUrl, shown);
+        if (!castUrl.isEmpty()) addEndpointRow(rows, shown, getString(R.string.label_lan_m3u), castUrl);
+        if (!castEpgUrl.isEmpty()) addEndpointRow(rows, shown, getString(R.string.label_lan_epg), castEpgUrl);
         for (HapBridge.EndpointInfo endpoint : status.endpoints) {
             if ("127.0.0.1".equals(endpoint.host)) continue;
-            addEndpointRow(endpoint.label, endpoint.baseUrl + "/aio", shown);
+            addEndpointRow(rows, shown, endpoint.label, endpoint.baseUrl + "/aio");
         }
+        return rows;
     }
 
-    private void addEndpointRow(String label, String url, List<String> shown) {
+    private void addEndpointRow(List<EndpointModel> rows, List<String> shown, String label, String url) {
         if (shown.contains(url)) return;
         shown.add(url);
+        rows.add(new EndpointModel(label, url));
+    }
 
+    private boolean sameEndpoints(List<EndpointModel> left, List<EndpointModel> right) {
+        if (left == null || right == null || left.size() != right.size()) return false;
+        for (int i = 0; i < left.size(); i++) {
+            if (!TextUtils.equals(left.get(i).label, right.get(i).label)) return false;
+            if (!TextUtils.equals(left.get(i).url, right.get(i).url)) return false;
+        }
+        return true;
+    }
+
+    /** Rebuilds the endpoint rows; only reached when the rendered set actually changed. */
+    private void renderEndpoints(List<EndpointModel> rows) {
+        renderedEndpoints = rows;
+        endpointsContainer.removeAllViews();
+        for (EndpointModel endpoint : rows) addEndpointRow(endpoint.label, endpoint.url);
+    }
+
+    private void addEndpointRow(String label, String url) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -1049,21 +1965,19 @@ public class HapConfigActivity extends Activity {
         }
     }
 
-    private void renderLogs(HapBridge.HapStatus status) {
-        String log = status.log == null ? "" : status.log.trim();
-        if (log.isEmpty()) {
-            logView.setText(getString(R.string.message_no_log));
-            return;
-        }
+    /** Last 80 log lines, computed off the main thread so an unchanged tick touches no view. */
+    private String runtimeLogText(String log) {
+        String trimmed = log == null ? "" : log.trim();
+        if (trimmed.isEmpty()) return getString(R.string.message_no_log);
 
-        String[] lines = log.split("\\r?\\n");
+        String[] lines = trimmed.split("\\r?\\n");
         int start = Math.max(0, lines.length - 80);
         StringBuilder out = new StringBuilder();
         for (int i = start; i < lines.length; i++) {
             if (out.length() > 0) out.append('\n');
             out.append(lines[i]);
         }
-        logView.setText(out.toString());
+        return out.toString();
     }
 
     private void setEnabled(boolean enabled) {
@@ -1146,7 +2060,7 @@ public class HapConfigActivity extends Activity {
         int storageMaxGb = parseIntOrDefault(ipfsStorageMaxEdit.getText().toString(), 2);
         showIpfsAdvancedFeedback(getString(R.string.message_saving_ipfs_settings), COLOR_BRAND);
         setBusy(true);
-        executor.execute(() -> {
+        workExecutor.execute(() -> {
             HapBridge.SaveResult result = HapBridge.saveIpfsAdvancedSettings(this, external, host, externalPort, gatewayPort, storageMaxGb);
             main(() -> {
                 setBusy(false);
@@ -1185,9 +2099,25 @@ public class HapConfigActivity extends Activity {
         }
     }
 
-    private void renderIpfsGateway(HapBridge.HapStatus status) {
-        ipfsGatewayContainer.removeAllViews();
-        if (status.ipfsGatewayUrl.isEmpty()) return;
+    /** Builds the gateway row once, then only the value text is updated in place. */
+    private void applyIpfsGateway(String url) {
+        String value = url == null ? "" : url;
+        if (value.isEmpty()) {
+            ipfsGatewayValue = "";
+            if (ipfsGatewayContainer.getChildCount() > 0) {
+                ipfsGatewayContainer.removeAllViews();
+                ipfsGatewayValueView = null;
+            }
+            return;
+        }
+
+        ipfsGatewayValue = value;
+        if (ipfsGatewayValueView != null) {
+            if (!TextUtils.equals(value, ipfsGatewayValueView.getText())) {
+                ipfsGatewayValueView.setText(value);
+            }
+            return;
+        }
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -1195,16 +2125,17 @@ public class HapConfigActivity extends Activity {
 
         row.addView(pill(getString(R.string.label_ipfs_gateway_url), COLOR_SURFACE, COLOR_TEXT_SECONDARY), wrapWrap());
 
-        TextView value = text(status.ipfsGatewayUrl, 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
-        value.setSingleLine(true);
-        value.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        value.setPadding(dp(8), 0, dp(8), 0);
-        row.addView(value, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView valueView = text(value, 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+        valueView.setSingleLine(true);
+        valueView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+        valueView.setPadding(dp(8), 0, dp(8), 0);
+        row.addView(valueView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         Button copy = smallButton(getString(R.string.button_copy));
-        copy.setOnClickListener(v -> copyToClipboard("HaP IPFS gateway", status.ipfsGatewayUrl));
+        copy.setOnClickListener(v -> copyToClipboard("HaP IPFS gateway", ipfsGatewayValue));
         row.addView(copy, wrapWrap());
 
+        ipfsGatewayValueView = valueView;
         ipfsGatewayContainer.addView(row, matchWrap());
     }
 
@@ -1222,7 +2153,7 @@ public class HapConfigActivity extends Activity {
         showMessage(getString(R.string.message_validating_source));
         showSourceFeedback(getString(R.string.message_validating_source), COLOR_BRAND);
         setBusy(true);
-        executor.execute(() -> {
+        workExecutor.execute(() -> {
             try {
                 HapBridge.SaveResult result = HapBridge.saveM3uSource(this, editId, name, url);
                 main(() -> {
@@ -1278,7 +2209,7 @@ public class HapConfigActivity extends Activity {
         int editIndex = customEditingIndex;
         showMessage(getString(R.string.message_saving_custom_channel));
         setBusy(true);
-        executor.execute(() -> {
+        workExecutor.execute(() -> {
             try {
                 HapBridge.SaveResult result = HapBridge.saveCustomChannel(this, editIndex, name, contentId);
                 main(() -> {
@@ -1322,7 +2253,7 @@ public class HapConfigActivity extends Activity {
 
     private void loadClients() {
         clientsStatusView.setText(getString(R.string.message_loading_clients));
-        executor.execute(() -> {
+        workExecutor.execute(() -> {
             try {
                 List<HapBridge.ConnectedClientInfo> clients = HapBridge.connectedClients();
                 main(() -> renderClients(clients));
@@ -1337,7 +2268,7 @@ public class HapConfigActivity extends Activity {
 
     private void loadChannelPlugins() {
         renderChannelFeedback(getString(R.string.message_loading_lists));
-        executor.execute(() -> {
+        workExecutor.execute(() -> {
             try {
                 HapBridge.start(this);
                 boolean ready = HapBridge.waitForProxyReady(90_000);
@@ -1360,16 +2291,20 @@ public class HapConfigActivity extends Activity {
 
     private void checkChannel(String contentId, String channelName) {
         renderChannelFeedback(getString(R.string.message_testing_channel, channelName));
-        executor.execute(() -> {
+        channelTestExecutor.execute(() -> {
+            HapBridge.PeerRequest request = beginPeerRequest();
             try {
-                HapBridge.PeerResultInfo result = HapBridge.checkPeers(contentId, 12);
+                HapBridge.PeerResultInfo result = HapBridge.checkPeers(contentId, 12, request);
                 main(() -> {
                     peerResults.put(contentId, result);
                     renderChannels();
                     renderChannelFeedback(null);
                 });
             } catch (Throwable error) {
+                if (peerRequestAborted(request)) return;
                 main(() -> renderChannelFeedback(errorMessage(error)));
+            } finally {
+                endPeerRequest(request);
             }
         });
     }
@@ -1381,33 +2316,37 @@ public class HapConfigActivity extends Activity {
             return;
         }
 
-        if (channelTestTask != null && !channelTestTask.isDone()) {
-            cancelChannelTest = true;
-            channelTestTask.cancel(true);
-        }
+        if (channelTestTask != null && !channelTestTask.isDone()) abortChannelTest();
         cancelChannelTest = false;
         stopChannelTestButton.setEnabled(true);
         renderChannelFeedback(getString(R.string.message_testing_list_progress, plugin.label, 0, plugin.channels.size()));
-        channelTestTask = executor.submit(() -> {
+        channelTestTask = channelTestExecutor.submit(() -> {
             int count = 0;
             for (HapBridge.ChannelInfo channel : plugin.channels) {
                 if (cancelChannelTest || Thread.currentThread().isInterrupted()) break;
                 count++;
                 int current = count;
                 main(() -> renderChannelFeedback(getString(R.string.message_testing_list_progress, channel.name, current, plugin.channels.size())));
+                HapBridge.PeerRequest request = beginPeerRequest();
                 try {
-                    HapBridge.PeerResultInfo result = HapBridge.checkPeers(channel.contentId, 8);
+                    HapBridge.PeerResultInfo result = HapBridge.checkPeers(channel.contentId, 8, request);
                     main(() -> {
                         peerResults.put(channel.contentId, result);
                         renderChannels();
                     });
                 } catch (Throwable error) {
-                    String errorText = errorMessage(error);
-                    main(() -> {
-                        peerResults.put(channel.contentId, HapBridge.PeerResultInfo.errorResult(errorText));
-                        renderChannels();
-                        renderChannelFeedback(errorText);
-                    });
+                    // An aborted check is not a channel failure: do not store an error result for
+                    // a channel that was never really tested.
+                    if (!peerRequestAborted(request)) {
+                        String errorText = errorMessage(error);
+                        main(() -> {
+                            peerResults.put(channel.contentId, HapBridge.PeerResultInfo.errorResult(errorText));
+                            renderChannels();
+                            renderChannelFeedback(errorText);
+                        });
+                    }
+                } finally {
+                    endPeerRequest(request);
                 }
             }
             main(() -> {
@@ -1418,10 +2357,38 @@ public class HapConfigActivity extends Activity {
     }
 
     private void stopChannelTest() {
-        cancelChannelTest = true;
-        if (channelTestTask != null) channelTestTask.cancel(true);
+        abortChannelTest();
         stopChannelTestButton.setEnabled(false);
         renderChannelFeedback(getString(R.string.message_test_stopped));
+    }
+
+    private HapBridge.PeerRequest beginPeerRequest() {
+        HapBridge.PeerRequest request = HapBridge.newPeerRequest();
+        inFlightPeerRequest = request;
+        return request;
+    }
+
+    private void endPeerRequest(HapBridge.PeerRequest request) {
+        if (inFlightPeerRequest == request) inFlightPeerRequest = null;
+    }
+
+    private boolean peerRequestAborted(HapBridge.PeerRequest request) {
+        return request.isCancelled() || cancelChannelTest || Thread.currentThread().isInterrupted();
+    }
+
+    /**
+     * Makes a channel test cancellation real. The interrupt stops the loop between channels; the
+     * request token closes the socket of the check that is currently blocked, because an interrupt
+     * alone never aborts a blocking socket read. The native side sees the client disconnect and
+     * aborts the peer session instead of running it to completion.
+     */
+    private void abortChannelTest() {
+        cancelChannelTest = true;
+        HapBridge.PeerRequest request = inFlightPeerRequest;
+        inFlightPeerRequest = null;
+        if (request != null) request.cancel();
+        Future<?> task = channelTestTask;
+        if (task != null) task.cancel(true);
     }
 
     private HapBridge.PluginChannelsInfo selectedPlugin() {
@@ -1442,7 +2409,7 @@ public class HapConfigActivity extends Activity {
     private void runBusy(String startMessage, Callable<String> work, Runnable after) {
         showMessage(startMessage);
         setBusy(true);
-        executor.execute(() -> {
+        workExecutor.execute(() -> {
             String message;
             try {
                 message = work.call();
@@ -1497,6 +2464,7 @@ public class HapConfigActivity extends Activity {
     }
 
     private void main(Runnable runnable) {
+        if (destroyed) return;
         handler.post(runnable);
     }
 
@@ -1563,10 +2531,6 @@ public class HapConfigActivity extends Activity {
             return new RuntimeBadge(getString(R.string.status_starting), COLOR_WARNING_MUTED, COLOR_WARNING);
         }
         return new RuntimeBadge(getString(R.string.status_stopped), COLOR_ERROR_MUTED, COLOR_ERROR);
-    }
-
-    private TextView statusPill(String label, boolean online) {
-        return pill(label, online ? COLOR_SUCCESS_MUTED : COLOR_ERROR_MUTED, online ? COLOR_SUCCESS : COLOR_ERROR);
     }
 
     private TextView weightedText(String value, float weight, int color, boolean bold) {
@@ -1725,6 +2689,32 @@ public class HapConfigActivity extends Activity {
         return params;
     }
 
+    /**
+     * A pill TextView plus the colours currently applied to it, so an unchanged refresh tick
+     * neither re-inflates the view nor allocates a new Drawable.
+     */
+    private final class Pill {
+        private final TextView view;
+        private int backgroundColor = Integer.MIN_VALUE;
+        private int textColor = Integer.MIN_VALUE;
+
+        Pill(TextView view) {
+            this.view = view;
+        }
+
+        void apply(String label, int background, int foreground) {
+            if (!TextUtils.equals(label, view.getText())) view.setText(label);
+            if (textColor != foreground) {
+                view.setTextColor(foreground);
+                textColor = foreground;
+            }
+            if (backgroundColor != background) {
+                view.setBackground(roundRect(background, dp(999), 0, 0));
+                backgroundColor = background;
+            }
+        }
+    }
+
     private static final class RuntimeBadge {
         final String label;
         final int containerColor;
@@ -1734,6 +2724,44 @@ public class HapConfigActivity extends Activity {
             this.label = label;
             this.containerColor = containerColor;
             this.contentColor = contentColor;
+        }
+    }
+
+    /** Everything the runtime refresh renders, read off the main thread. */
+    private static final class RuntimeSnapshot {
+        String stateLabel;
+        int stateBackgroundColor;
+        int stateTextColor;
+        String phaseLabel;
+        int phaseBackgroundColor;
+        int phaseTextColor;
+        String aceServeLabel;
+        int aceServeBackgroundColor;
+        int aceServeTextColor;
+        String proxyLabel;
+        int proxyBackgroundColor;
+        int proxyTextColor;
+        String errorText;
+        boolean desiredRunning;
+        boolean externalPlayerServerEnabled;
+        boolean lanModeEnabled;
+        boolean ipfsEnabled;
+        String ipfsLabel;
+        int ipfsBackgroundColor;
+        int ipfsTextColor;
+        String ipfsErrorText;
+        String ipfsGatewayUrl;
+        List<EndpointModel> endpoints;
+        String logText;
+    }
+
+    private static final class EndpointModel {
+        final String label;
+        final String url;
+
+        EndpointModel(String label, String url) {
+            this.label = label;
+            this.url = url;
         }
     }
 

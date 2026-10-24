@@ -375,7 +375,22 @@ public final class HapBridge {
     }
 
     public static PeerResultInfo checkPeers(String contentId, int maxWaitSeconds) throws Exception {
-        ChannelStatusClient.PeerResult result = ChannelStatusClient.checkPeers(contentId, maxWaitSeconds);
+        return checkPeers(contentId, maxWaitSeconds, null);
+    }
+
+    /**
+     * Peer check that can be aborted for real.
+     *
+     * <p>Passing a {@link PeerRequest} lets the caller cancel the in-flight request to the local
+     * proxy, which closes the socket instead of letting the blocking read run to completion.
+     */
+    public static PeerResultInfo checkPeers(String contentId, int maxWaitSeconds, PeerRequest request)
+            throws Exception {
+        ChannelStatusClient.PeerResult result = ChannelStatusClient.checkPeers(
+                contentId,
+                maxWaitSeconds,
+                request == null ? null : request.cancellation
+        );
         return new PeerResultInfo(
                 result.success,
                 result.available,
@@ -385,6 +400,27 @@ public final class HapBridge {
                 result.statusText,
                 result.error
         );
+    }
+
+    /** Handle for aborting an in-flight {@link #checkPeers} call. */
+    public static final class PeerRequest {
+        private final ChannelStatusClient.Cancellation cancellation = new ChannelStatusClient.Cancellation();
+
+        PeerRequest() {
+        }
+
+        /** Aborts the running request immediately; safe to call from any thread. */
+        public void cancel() {
+            cancellation.cancel();
+        }
+
+        public boolean isCancelled() {
+            return cancellation.isCancelled();
+        }
+    }
+
+    public static PeerRequest newPeerRequest() {
+        return new PeerRequest();
     }
 
     public static final class HapStatus {

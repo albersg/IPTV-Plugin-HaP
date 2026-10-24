@@ -21,6 +21,7 @@ final class HealthClient {
         long deadline = System.currentTimeMillis() + timeoutMillis;
         try {
             while (System.currentTimeMillis() < deadline) {
+                if (Thread.currentThread().isInterrupted()) return false;
                 try {
                     HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
                     connection.setConnectTimeout(1500);
@@ -44,6 +45,7 @@ final class HealthClient {
         long deadline = System.currentTimeMillis() + timeoutMillis;
         try {
             while (System.currentTimeMillis() < deadline) {
+                if (Thread.currentThread().isInterrupted()) return false;
                 try (Socket socket = new Socket()) {
                     socket.connect(new InetSocketAddress(host, port), 1500);
                     return true;

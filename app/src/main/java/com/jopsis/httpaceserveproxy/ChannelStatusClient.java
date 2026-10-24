@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.charset.CharsetDecoder;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 final class ChannelStatusClient {
     private static final int CONNECT_TIMEOUT_MS = 2500;
@@ -56,12 +57,16 @@ final class ChannelStatusClient {
     }
 
     static PeerResult checkPeers(String contentId, int maxWaitSeconds) throws Exception {
+        return checkPeers(contentId, maxWaitSeconds, null);
+    }
+
+    static PeerResult checkPeers(String contentId, int maxWaitSeconds, Cancellation cancellation) throws Exception {
         String url = PlaylistCatalog.BASE_URL
                 + "/statplugin?action=check_peers&content_id="
                 + encode(contentId)
                 + "&max_wait="
                 + Math.max(5, Math.min(30, maxWaitSeconds));
-        JSONObject data = new JSONObject(get(url, Math.max(8000, (maxWaitSeconds + 5) * 1000)));
+        JSONObject data = new JSONObject(get(url, Math.max(8000, (maxWaitSeconds + 5) * 1000), cancellation));
 
         PeerResult result = new PeerResult();
         result.success = "success".equals(data.optString("status"));
@@ -75,16 +80,35 @@ final class ChannelStatusClient {
     }
 
     private static String get(String url, int readTimeoutMs) throws IOException {
+        return get(url, readTimeoutMs, null);
+    }
+
+    /**
+     * Performs the GET, registering the live connection with {@code cancellation} (when given) so
+     * that a cancel from another thread closes the socket and makes the blocking read return at
+     * once. This is the only way to abort a blocking socket read: an interrupt does not reach it.
+     */
+    private static String get(String url, int readTimeoutMs, Cancellation cancellation) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
         connection.setReadTimeout(readTimeoutMs);
         connection.setRequestMethod("GET");
-        int status = connection.getResponseCode();
-        InputStream input = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        String body = readAll(input);
-        connection.disconnect();
-        if (status < 200 || status >= 300) throw new IOException("HTTP " + status + ": " + body);
-        return body;
+        if (cancellation != null) cancellation.register(connection);
+        try {
+            int status = connection.getResponseCode();
+            InputStream input = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            String body = readAll(input);
+            if (status < 200 || status >= 300) throw new IOException("HTTP " + status + ": " + body);
+            return body;
+        } catch (IOException error) {
+            // A cancel closes the socket under the reader, which surfaces as a broken pipe/reset.
+            // Report it as a cancellation so callers do not treat it as a real channel failure.
+            if (cancellation != null && cancellation.isCancelled()) throw new CancelledException();
+            throw error;
+        } finally {
+            if (cancellation != null) cancellation.unregister(connection);
+            connection.disconnect();
+        }
     }
 
     private static String readAll(InputStream input) throws IOException {
@@ -109,6 +133,49 @@ final class ChannelStatusClient {
         if (PlaylistCatalog.USER_M3U_PLUGIN_ID.equals(id)) return 0;
         if (PlaylistCatalog.CUSTOM_ID.equals(id)) return 1;
         return 2;
+    }
+
+    /**
+     * Handle for aborting an in-flight status request.
+     *
+     * <p>Closing the {@link HttpURLConnection} shuts the socket down and wakes the thread blocked
+     * in the read. {@code Future.cancel(true)} cannot do that, so the reference to the live
+     * connection has to be kept here. Cancelling also aborts the matching native peer session,
+     * because the local proxy observes the client disconnect.
+     */
+    static final class Cancellation {
+        private final AtomicReference<HttpURLConnection> connection = new AtomicReference<>();
+        private volatile boolean cancelled;
+
+        boolean isCancelled() {
+            return cancelled;
+        }
+
+        void cancel() {
+            cancelled = true;
+            HttpURLConnection active = connection.getAndSet(null);
+            if (active != null) active.disconnect();
+        }
+
+        void register(HttpURLConnection target) throws IOException {
+            connection.set(target);
+            if (cancelled) {
+                connection.compareAndSet(target, null);
+                target.disconnect();
+                throw new CancelledException();
+            }
+        }
+
+        void unregister(HttpURLConnection target) {
+            connection.compareAndSet(target, null);
+        }
+    }
+
+    /** Raised when a request was aborted on purpose instead of failing. */
+    static final class CancelledException extends IOException {
+        CancelledException() {
+            super("channel test cancelled");
+        }
     }
 
     static final class PluginChannels {
