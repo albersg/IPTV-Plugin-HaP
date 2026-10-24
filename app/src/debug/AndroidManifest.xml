@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-variant manifest overlay.
+
+  Declares the ADB-drivable control activity used to start, stop and inspect the
+  HaP runtime from a test script instead of the TV D-pad UI. Nothing here is
+  merged into a release build: release APKs keep the single exported
+  configuration activity declared in src/main.
+
+  The activity is exported because adb runs it as the `shell` UID, which cannot
+  start a non-exported component of another package.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name=".debug.HapDebugControlActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="HaP debug control"
+            android:noHistory="true"
+            android:theme="@style/AppTheme" />
+    </application>
+
+</manifest>
