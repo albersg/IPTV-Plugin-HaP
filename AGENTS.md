@@ -113,6 +113,51 @@ There are currently no `app/src/test` or `app/src/androidTest` sources. For
 behavioral changes, run at least `:app:assembleUniversalDebug` and do a
 device smoke test for the affected flow.
 
+### Native unit tests
+
+The pure helper layer (`app/src/main/cpp/httpaceproxycpp/src/util.cpp`) has a
+host-side GoogleTest suite in `native-tests/`. It compiles the same source that
+ships in the APK, without `HTTPACEPROXYCPP_ANDROID`, so `log_line` falls back to
+`std::cerr` and no Android SDK is needed. It covers URL parsing and
+`path_is_safe_relative`, the guard that keeps `/stat/<path>` from serving files
+outside the bundled `http/` directory.
+
+```sh
+cmake -S native-tests -B build/native-tests -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native-tests -j
+ctest --test-dir build/native-tests --output-on-failure
+```
+
+Nothing under `native-tests/` is packaged into the app.
+
+### On-device measurement
+
+`tools/device-check.sh` collects reproducible measurements straight from the
+device: hardware facts, per-process RSS, thread counts, socket counts, and
+start/stop leak checks. Run the same scenario before and after a change instead
+of estimating.
+
+```sh
+tools/device-check.sh facts
+tools/device-check.sh install app/build/outputs/apk/armv7/debug/app-armv7-debug.apk
+tools/device-check.sh scenario
+tools/device-check.sh leak-check
+```
+
+On WSL2 there is no USB sysfs, so the device is only reachable through a
+Windows-side adb; pass it explicitly:
+`ADB=/mnt/c/Users/<user>/hap-tools/platform-tools/adb.exe`.
+
+Debug builds also carry `HapDebugControlActivity`, declared only in
+`app/src/debug/AndroidManifest.xml`, so the runtime can be driven from a script
+instead of the D-pad. Release builds contain neither the class' manifest entry
+nor an exported control surface:
+
+```sh
+ADB=... tools/device-check.sh control start
+ADB=... tools/device-check.sh control status
+```
+
 ## Change Rules
 
 - Keep version data synchronized across `app/build.gradle.kts`,
