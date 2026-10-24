@@ -166,10 +166,16 @@ public final class ChannelTestBatchTest {
                 TestCancellation::new,
                 (contentId, cancellation) -> {
                     twoStarted.countDown();
-                    // Stands in for a blocking socket read: only the handle can stop it.
+                    // Stands in for a blocking socket read: only the handle can stop it. An
+                    // interrupt is not an abort on its own, so it is absorbed here exactly like
+                    // ChannelStatusClient does, and the handle is what decides the outcome.
                     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-                    while (!cancellation.isCancelled() && System.nanoTime() < deadline) {
-                        Thread.sleep(5);
+                    try {
+                        while (!cancellation.isCancelled() && System.nanoTime() < deadline) {
+                            Thread.sleep(5);
+                        }
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
                     }
                     if (cancellation.isCancelled()) {
                         abortedChecks.incrementAndGet();
@@ -186,6 +192,10 @@ public final class ChannelTestBatchTest {
 
         batch.cancel();
         join(batch);
+        // A cancelled check reports nothing, so wait for the worker pool itself to go quiet
+        // before asserting that no result leaked out.
+        workers.shutdown();
+        assertTrue(workers.awaitTermination(5, TimeUnit.SECONDS));
 
         assertEquals("both in-flight checks must see the cancel", 2, abortedChecks.get());
         assertTrue("a cancelled channel is not a result", recorder.results.isEmpty());

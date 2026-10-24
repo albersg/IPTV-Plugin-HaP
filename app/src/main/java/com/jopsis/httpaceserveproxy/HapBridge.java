@@ -402,18 +402,38 @@ public final class HapBridge {
         );
     }
 
-    /** Handle for aborting an in-flight {@link #checkPeers} call. */
-    public static final class PeerRequest {
+    /**
+     * Number of clients currently streaming from the proxy.
+     *
+     * <p>This is the playback signal for the channel-test batch: a peer check itself is a control
+     * request and never registers as a streaming client, so a non-zero count means somebody is
+     * watching something and testing has to step back (S3). It reuses the clients endpoint the
+     * configuration screen already reads; the caller is expected to cache the result instead of
+     * polling it in a tight loop.
+     */
+    public static int connectedClientCount() throws Exception {
+        return ConnectedClientsClient.load().size();
+    }
+
+    /**
+     * Handle for aborting an in-flight {@link #checkPeers} call.
+     *
+     * <p>It is also a {@link ChannelTestBatch.Cancellation}, so a parallel batch can hand one of
+     * these to every check it dispatches and abort all of them at once.
+     */
+    public static final class PeerRequest implements ChannelTestBatch.Cancellation {
         private final ChannelStatusClient.Cancellation cancellation = new ChannelStatusClient.Cancellation();
 
         PeerRequest() {
         }
 
         /** Aborts the running request immediately; safe to call from any thread. */
+        @Override
         public void cancel() {
             cancellation.cancel();
         }
 
+        @Override
         public boolean isCancelled() {
             return cancellation.isCancelled();
         }

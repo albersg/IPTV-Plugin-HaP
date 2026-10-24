@@ -14,6 +14,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
@@ -29,6 +30,7 @@ import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import com.jopsis.httpaceserveproxy.ChannelTestBatch;
 import com.jopsis.httpaceserveproxy.HapBridge;
 import com.jopsis.httpaceserveproxy.UpdateClient;
 import com.jopsis.httpaceserveproxy.UpdateDownloader;
@@ -50,12 +52,18 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class HapConfigActivity extends Activity {
     private static final long REFRESH_INTERVAL_MS = 1000L;
+    /** Peer budget of one channel inside a list test. */
+    private static final int CHANNEL_TEST_MAX_WAIT_SECONDS = 8;
+    /** Peer budget of a channel the user asked for explicitly; it owns the engine, so it gets more. */
+    private static final int CHANNEL_TEST_SINGLE_MAX_WAIT_SECONDS = 12;
+    /** How long a playback probe is reused before asking the proxy again. */
+    private static final long PLAYBACK_PROBE_TTL_MS = 1000L;
     private static final int COLOR_CANVAS = 0xFF07111B;
     private static final int COLOR_PANEL = 0xEE101B2B;
     private static final int COLOR_PANEL_SOFT = 0x99162435;
@@ -78,11 +86,32 @@ public class HapConfigActivity extends Activity {
     /** Runs state refreshes, source/playlist changes and other user-triggered work. */
     private final ExecutorService workExecutor = newSingleThread("hap-config-work");
     /**
-     * Channel tests get their own single thread: a list test can spend up to ~8s per channel on a
+     * Channel tests get their own thread: a list test can spend up to ~8s per channel on a
      * blocking peer check, and on the shared executor that blocked every other background action
      * (refresh, source add/remove, playlist load) for the whole test, which read as a frozen UI.
+     * It runs a single explicit check, or the batch driver that dispatches the parallel checks
+     * below. Keeping the driver here also keeps explicit single checks ordered behind one another.
      */
     private final ExecutorService channelTestExecutor = newSingleThread("hap-channel-test");
+    /**
+     * Concurrency of a list test, taken from the CPU count instead of guessed: see
+     * {@link ChannelTestBatch#parallelLimit}. 4 cores on the reference device (Amlogic S905X5M)
+     * give 2 checks at once, which leaves the rest of the box to playback.
+     */
+    private final int channelTestParallelism =
+            ChannelTestBatch.parallelLimit(Runtime.getRuntime().availableProcessors());
+    /** Pool for the parallel checks. Created on demand: most sessions never run a list test. */
+    private volatile ExecutorService channelTestPool;
+    /** The list test that is running, so a stop can abort every check it has in flight. */
+    private volatile ChannelTestBatch<HapBridge.PeerResultInfo> activeChannelTestBatch;
+    /**
+     * Run token. Starting a test bumps it and every callback checks it, so a superseded run can
+     * never overwrite a newer result. A shared boolean cannot do that: a new run would clear the
+     * flag before the previous task had actually stopped.
+     */
+    private final AtomicInteger channelTestGeneration = new AtomicInteger();
+    private volatile boolean playbackProbeActive;
+    private volatile long playbackProbeAt;
     /** Reads {@link HapBridge#status} off the main thread for the 1s runtime poll. */
     private final ExecutorService statusExecutor = newSingleThread("hap-runtime-status");
     private final AtomicBoolean statusPollInFlight = new AtomicBoolean(false);
@@ -138,9 +167,7 @@ public class HapConfigActivity extends Activity {
     private String selectedPluginId;
     private String selectedChannelContentId;
     private int customEditingIndex = -1;
-    private volatile Future<?> channelTestTask;
     private volatile HapBridge.PeerRequest inFlightPeerRequest;
-    private volatile boolean cancelChannelTest;
     private volatile boolean destroyed;
     private List<EndpointModel> renderedEndpoints;
     private String renderedLogText;
@@ -240,6 +267,8 @@ public class HapConfigActivity extends Activity {
         abortChannelTest();
         releaseUpdateResources();
         statusExecutor.shutdownNow();
+        ExecutorService pool = channelTestPool;
+        if (pool != null) pool.shutdownNow();
         channelTestExecutor.shutdownNow();
         workExecutor.shutdownNow();
         super.onDestroy();
@@ -2290,19 +2319,31 @@ public class HapConfigActivity extends Activity {
     }
 
     private void checkChannel(String contentId, String channelName) {
+        // An explicit single check supersedes anything already running: the same channel must not
+        // be tested twice at once, and the remaining P2P sessions of a batch are wasted once the
+        // user asks for one channel, so the batch is really stopped instead of left running.
+        int generation = abortChannelTest();
         renderChannelFeedback(getString(R.string.message_testing_channel, channelName));
+
+        HapBridge.PeerRequest request = HapBridge.newPeerRequest();
+        inFlightPeerRequest = request;
         channelTestExecutor.execute(() -> {
-            HapBridge.PeerRequest request = beginPeerRequest();
             try {
-                HapBridge.PeerResultInfo result = HapBridge.checkPeers(contentId, 12, request);
+                HapBridge.PeerResultInfo result =
+                        HapBridge.checkPeers(contentId, CHANNEL_TEST_SINGLE_MAX_WAIT_SECONDS, request);
                 main(() -> {
+                    if (!isCurrentRun(generation)) return;
                     peerResults.put(contentId, result);
                     renderChannels();
                     renderChannelFeedback(null);
                 });
             } catch (Throwable error) {
-                if (peerRequestAborted(request)) return;
-                main(() -> renderChannelFeedback(errorMessage(error)));
+                // An aborted check is not a channel failure.
+                if (request.isCancelled() || !isCurrentRun(generation)) return;
+                main(() -> {
+                    if (!isCurrentRun(generation)) return;
+                    renderChannelFeedback(errorMessage(error));
+                });
             } finally {
                 endPeerRequest(request);
             }
@@ -2316,44 +2357,89 @@ public class HapConfigActivity extends Activity {
             return;
         }
 
-        if (channelTestTask != null && !channelTestTask.isDone()) abortChannelTest();
-        cancelChannelTest = false;
+        int generation = abortChannelTest();
+        // A new batch starts from a fresh playback reading instead of the previous run's answer.
+        playbackProbeActive = false;
+        playbackProbeAt = 0L;
+
+        List<String> contentIds = new ArrayList<>(plugin.channels.size());
+        Map<String, String> names = new HashMap<>();
+        for (HapBridge.ChannelInfo channel : plugin.channels) {
+            contentIds.add(channel.contentId);
+            names.put(channel.contentId, channel.name);
+        }
+
+        ChannelTestBatch<HapBridge.PeerResultInfo> batch = new ChannelTestBatch<>(
+                contentIds,
+                channelTestParallelism,
+                HapBridge::newPeerRequest,
+                // The batch creates its handles with HapBridge::newPeerRequest, so every handle it
+                // hands to a check is a PeerRequest and can abort that check's socket.
+                (contentId, cancellation) -> HapBridge.checkPeers(
+                        contentId,
+                        CHANNEL_TEST_MAX_WAIT_SECONDS,
+                        (HapBridge.PeerRequest) cancellation),
+                channelTestPool(),
+                this::playbackActive,
+                channelTestListener(generation, names));
+
+        activeChannelTestBatch = batch;
         stopChannelTestButton.setEnabled(true);
-        renderChannelFeedback(getString(R.string.message_testing_list_progress, plugin.label, 0, plugin.channels.size()));
-        channelTestTask = channelTestExecutor.submit(() -> {
-            int count = 0;
-            for (HapBridge.ChannelInfo channel : plugin.channels) {
-                if (cancelChannelTest || Thread.currentThread().isInterrupted()) break;
-                count++;
-                int current = count;
-                main(() -> renderChannelFeedback(getString(R.string.message_testing_list_progress, channel.name, current, plugin.channels.size())));
-                HapBridge.PeerRequest request = beginPeerRequest();
-                try {
-                    HapBridge.PeerResultInfo result = HapBridge.checkPeers(channel.contentId, 8, request);
-                    main(() -> {
-                        peerResults.put(channel.contentId, result);
-                        renderChannels();
-                    });
-                } catch (Throwable error) {
-                    // An aborted check is not a channel failure: do not store an error result for
-                    // a channel that was never really tested.
-                    if (!peerRequestAborted(request)) {
-                        String errorText = errorMessage(error);
-                        main(() -> {
-                            peerResults.put(channel.contentId, HapBridge.PeerResultInfo.errorResult(errorText));
-                            renderChannels();
-                            renderChannelFeedback(errorText);
-                        });
-                    }
-                } finally {
-                    endPeerRequest(request);
-                }
+        renderChannelFeedback(getString(R.string.message_testing_list_progress, plugin.label, 0, batch.total()));
+        channelTestExecutor.execute(batch::run);
+    }
+
+    /**
+     * Bridges the batch's per-check outcomes to the UI.
+     *
+     * <p>The callbacks arrive on the pool threads, so every one of them is posted to the main
+     * thread and dropped when the run it belongs to was superseded.
+     */
+    private ChannelTestBatch.Listener<HapBridge.PeerResultInfo> channelTestListener(
+            final int generation, final Map<String, String> names) {
+        return new ChannelTestBatch.Listener<HapBridge.PeerResultInfo>() {
+            @Override
+            public void onResult(String contentId, HapBridge.PeerResultInfo result, int completed, int total) {
+                main(() -> {
+                    if (!isCurrentRun(generation)) return;
+                    peerResults.put(contentId, result);
+                    renderChannels();
+                    renderChannelFeedback(progressMessage(names.get(contentId), completed, total));
+                });
             }
-            main(() -> {
-                stopChannelTestButton.setEnabled(false);
-                renderChannelFeedback(cancelChannelTest ? getString(R.string.message_test_stopped) : getString(R.string.message_list_test_complete));
-            });
-        });
+
+            @Override
+            public void onFailure(String contentId, Exception error, int completed, int total) {
+                String errorText = errorMessage(error);
+                main(() -> {
+                    if (!isCurrentRun(generation)) return;
+                    // A failing or timing out channel records its own result; the batch goes on.
+                    peerResults.put(contentId, HapBridge.PeerResultInfo.errorResult(errorText));
+                    renderChannels();
+                    renderChannelFeedback(errorText);
+                });
+            }
+
+            @Override
+            public void onFinished(boolean cancelled) {
+                main(() -> {
+                    if (!isCurrentRun(generation)) return;
+                    activeChannelTestBatch = null;
+                    stopChannelTestButton.setEnabled(false);
+                    renderChannelFeedback(cancelled
+                            ? getString(R.string.message_test_stopped)
+                            : getString(R.string.message_list_test_complete));
+                });
+            }
+        };
+    }
+
+    private String progressMessage(String channelName, int completed, int total) {
+        return getString(
+                R.string.message_testing_list_progress,
+                channelName == null ? "" : channelName,
+                completed,
+                total);
     }
 
     private void stopChannelTest() {
@@ -2362,33 +2448,78 @@ public class HapConfigActivity extends Activity {
         renderChannelFeedback(getString(R.string.message_test_stopped));
     }
 
-    private HapBridge.PeerRequest beginPeerRequest() {
-        HapBridge.PeerRequest request = HapBridge.newPeerRequest();
-        inFlightPeerRequest = request;
-        return request;
-    }
-
     private void endPeerRequest(HapBridge.PeerRequest request) {
         if (inFlightPeerRequest == request) inFlightPeerRequest = null;
     }
 
-    private boolean peerRequestAborted(HapBridge.PeerRequest request) {
-        return request.isCancelled() || cancelChannelTest || Thread.currentThread().isInterrupted();
+    /** True while {@code generation} is still the current run; stale callbacks are dropped. */
+    private boolean isCurrentRun(int generation) {
+        return channelTestGeneration.get() == generation && !destroyed;
     }
 
     /**
-     * Makes a channel test cancellation real. The interrupt stops the loop between channels; the
-     * request token closes the socket of the check that is currently blocked, because an interrupt
-     * alone never aborts a blocking socket read. The native side sees the client disconnect and
-     * aborts the peer session instead of running it to completion.
+     * Cancels the whole current test run and returns the new run token.
+     *
+     * <p>Every check in flight is aborted through its own handle: closing the socket is the only
+     * thing that unblocks a blocked read, an interrupt does not (S4). The native side then sees
+     * the client disconnect and stops the P2P session instead of running it to completion.
      */
-    private void abortChannelTest() {
-        cancelChannelTest = true;
+    private int abortChannelTest() {
+        int generation = channelTestGeneration.incrementAndGet();
+        ChannelTestBatch<HapBridge.PeerResultInfo> batch = activeChannelTestBatch;
+        activeChannelTestBatch = null;
+        if (batch != null) batch.cancel();
         HapBridge.PeerRequest request = inFlightPeerRequest;
         inFlightPeerRequest = null;
         if (request != null) request.cancel();
-        Future<?> task = channelTestTask;
-        if (task != null) task.cancel(true);
+        return generation;
+    }
+
+    /**
+     * True when something is actually being watched through HaP, so testing has to give way (S3).
+     *
+     * <p>A peer check is a control request and never registers as a streaming client, so any
+     * connected client means real playback. The answer is reused for a second: the batch re-reads
+     * it a few times per second and each reading costs a loopback round trip.
+     */
+    private boolean playbackActive() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - playbackProbeAt < PLAYBACK_PROBE_TTL_MS) return playbackProbeActive;
+
+        boolean active;
+        if (destroyed || !HapBridge.status(this).proxyRunning) {
+            // No proxy, no playback: nothing can be streaming through HaP.
+            active = false;
+        } else {
+            active = playbackProbeActive;
+            try {
+                active = HapBridge.connectedClientCount() > 0;
+            } catch (Throwable error) {
+                // Keep the last known answer: widening the batch on an unreadable signal is the
+                // wrong direction when playback has priority.
+            }
+        }
+        playbackProbeActive = active;
+        playbackProbeAt = now;
+        return active;
+    }
+
+    /** The pool the batch dispatches its checks to; created on first use. */
+    private ExecutorService channelTestPool() {
+        ExecutorService pool = channelTestPool;
+        if (pool != null) return pool;
+        synchronized (this) {
+            if (channelTestPool == null) {
+                channelTestPool = Executors.newFixedThreadPool(
+                        channelTestParallelism,
+                        task -> {
+                            Thread thread = new Thread(task, "hap-channel-check");
+                            thread.setDaemon(true);
+                            return thread;
+                        });
+            }
+            return channelTestPool;
+        }
     }
 
     private HapBridge.PluginChannelsInfo selectedPlugin() {
