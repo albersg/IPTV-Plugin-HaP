@@ -2,6 +2,13 @@
 
 All notable changes to HaP will be documented here.
 
+## [1.4.1] - 2026-10-24
+
+### Changed
+
+- Published from the fork with its own signing key, so the in-app updater has a
+  real signed release to verify and install.
+
 ## [1.4.0] - 2026-10-24
 
 Performance and stability work targeting the Xiaomi TV Box S 3rd Gen
