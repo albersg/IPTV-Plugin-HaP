@@ -121,6 +121,11 @@ android {
 
 dependencies {
     implementation(libs.core.ktx)
+
+    // The updater's decision core (com.jopsis.httpaceserveproxy.update) is plain
+    // Java with no android.* imports, so it is tested on the JVM instead of on a
+    // device. Everything else in this app still needs a device or Robolectric.
+    testImplementation(libs.junit)
 }
 
 tasks.register("checkIpfsBinaries") {
