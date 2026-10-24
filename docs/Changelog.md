@@ -2,7 +2,7 @@
 
 All notable changes to HaP will be documented here.
 
-## [1.4.0] - unreleased
+## [1.4.0] - 2026-10-24
 
 Performance and stability work targeting the Xiaomi TV Box S 3rd Gen
 (`MiTV-AFMU0`, Android 14, Amlogic S905X5M, **armeabi-v7a only**, 1.96 GB RAM).
