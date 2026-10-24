@@ -1,0 +1,149 @@
+name: Native tests and static checks
+
+# Runs the cheap, deterministic checks that catch regressions in the parts of
+# HaP that are easy to break silently: the pure native helpers (URL handling and
+# the path-traversal guard behind /stat/<path>), plus Android lint and an APK
+# size report.
+#
+# Deliberately separate from build-apk.yml so a failing static check can never
+# block or complicate a signed release.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-tests:
+    name: Native unit tests (host)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S native-tests -B build/native-tests -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build tests
+        run: cmake --build build/native-tests -j"$(nproc)"
+
+      - name: Run tests
+        run: ctest --test-dir build/native-tests --output-on-failure
+
+  lint:
+    name: Android lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "platforms;android-36" \
+            "build-tools;36.1.0" \
+            "cmake;3.22.1" \
+            "ndk;27.0.12077973"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+
+      - name: Cache kubo build
+        id: kubo-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libipfs.so
+            app/src/main/jniLibs/armeabi-v7a/libipfs.so
+          key: kubo-${{ runner.os }}-${{ hashFiles('tools/fetch-kubo.sh') }}
+
+      - name: Build IPFS (kubo) binaries
+        if: steps.kubo-cache.outputs.cache-hit != 'true'
+        run: tools/fetch-kubo.sh
+
+      - name: Lint
+        run: ./gradlew --no-daemon :app:lintArmv7Debug
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-*.html
+          if-no-files-found: ignore
+
+  apk-size:
+    name: APK size report
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "platforms;android-36" \
+            "build-tools;36.1.0" \
+            "cmake;3.22.1" \
+            "ndk;27.0.12077973"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+
+      - name: Cache kubo build
+        id: kubo-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libipfs.so
+            app/src/main/jniLibs/armeabi-v7a/libipfs.so
+          key: kubo-${{ runner.os }}-${{ hashFiles('tools/fetch-kubo.sh') }}
+
+      - name: Build IPFS (kubo) binaries
+        if: steps.kubo-cache.outputs.cache-hit != 'true'
+        run: tools/fetch-kubo.sh
+
+      # The per-ABI flavors are the ones that matter on real hardware: the
+      # universal APK carries both ABIs' kubo blob and AceServe zip, which is
+      # roughly double the size of the APK a given device can actually use.
+      - name: Assemble armv7 and arm64
+        run: ./gradlew --no-daemon :app:assembleArmv7Debug :app:assembleArm64Debug
+
+      - name: Report sizes
+        run: |
+          {
+            echo "### APK sizes"
+            echo
+            echo "| APK | Bytes | MiB |"
+            echo "| --- | --- | --- |"
+            for f in app/build/outputs/apk/*/debug/*.apk; do
+              [ -f "$f" ] || continue
+              bytes=$(stat -c%s "$f")
+              mib=$(awk "BEGIN{printf \"%.1f\", $bytes/1048576}")
+              echo "| $(basename "$f") | $bytes | $mib |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
