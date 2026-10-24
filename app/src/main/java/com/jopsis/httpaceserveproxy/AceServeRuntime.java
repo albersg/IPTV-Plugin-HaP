@@ -83,7 +83,9 @@ final class AceServeRuntime {
         command.add("--disable-sentry");
         command.add("--log-stdout");
         command.add("--disable-upnp");
-        Log.i(TAG, "start command=" + command);
+        // Privacy: never dump the full argument list. Cache paths and identifiers
+        // would otherwise be readable from logcat via adb.
+        Log.i(TAG, "start command=" + command.get(0) + " (" + command.size() + " args)");
 
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(root);

@@ -52,6 +52,9 @@ CACHE_DIR = os.environ.get("ACE_CACHE_DIR", ANDROID_PATHS.get("cacheDir", os.pat
 # the live cache size is a product constraint, not a tuning knob.
 LIVE_CACHE_SIZE_BYTES = 104857600
 
+# Cap for the on-disk engine log; see log() for why it is truncated.
+LOG_MAX_BYTES = 512 * 1024
+
 ANDROID_DATA_DIR = os.environ.get("ANDROID_DATA", ANDROID_PATHS.get("androidDataDir", root_path("android-data")))
 TEMP_DIR = os.environ.get("TEMP", ANDROID_PATHS.get("tempDir", root_path("tmp")))
 
@@ -159,7 +162,18 @@ def log(message):
     )
     print(line, flush=True)
     try:
-        with real_open(os.path.join(CACHE_DIR, "acestream.log"), "a") as handle:
+        log_path = os.path.join(CACHE_DIR, "acestream.log")
+        # Privacy: engine logs carry content ids and infohashes. Keep the file
+        # useful for diagnostics but bounded at 512 KiB so identifiers cannot
+        # accumulate indefinitely on the device; it is truncated, not rotated,
+        # to avoid leaving older copies behind. Does not affect the 100 MiB live
+        # stream cache.
+        try:
+            if os.path.getsize(log_path) > LOG_MAX_BYTES:
+                real_open(log_path, "w").close()
+        except OSError:
+            pass
+        with real_open(log_path, "a") as handle:
             handle.write(line + "\n")
     except Exception:
         pass
