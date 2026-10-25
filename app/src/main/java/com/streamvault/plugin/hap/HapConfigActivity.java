@@ -68,6 +68,7 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -1290,6 +1291,87 @@ public class HapConfigActivity extends Activity {
         return panel.container;
     }
 
+    /**
+     * Loads what is on now and paints it.
+     *
+     * <p>Off the main thread: reading the guide from disk and parsing it is not instant, and on the device
+     * a cold download took 96.8 seconds. Nothing here touches the network on the main thread.
+     */
+    private void loadEvents(LinearLayout container, Button trigger) {
+        HapBridge.PluginChannelsInfo plugin = selectedPlugin();
+        container.setVisibility(View.VISIBLE);
+        container.removeAllViews();
+        if (plugin == null || plugin.channels.isEmpty()) {
+            container.addView(text(getString(R.string.events_no_channels), 13, COLOR_TEXT_SECONDARY,
+                    Typeface.NORMAL), matchWrap());
+            return;
+        }
+        trigger.setEnabled(false);
+        TextView progress = text(getString(R.string.events_loading), 13, COLOR_TEXT_SECONDARY,
+                Typeface.NORMAL);
+        container.addView(progress, matchWrap());
+
+        new Thread(() -> {
+            List<EventCatalog.Event> events = new ArrayList<>();
+            String error = null;
+            int matched = 0;
+            try {
+                long now = System.currentTimeMillis();
+                GuideRepository.Result result = GuideRepository.load(getCacheDir(), now, false);
+                EpgWindow window = EpgWindow.parse(
+                        new java.io.ByteArrayInputStream(result.xml), now, 3_600_000L, 6 * 3_600_000L);
+                List<ChannelGuideMatcher.Match> matches = ChannelGuideMatcher.matchAll(
+                        plugin.channels,
+                        channel -> channel.contentId,
+                        channel -> channel.name,
+                        window.channels(),
+                        null);
+                Map<String, String> channelToGuide = new LinkedHashMap<>();
+                for (ChannelGuideMatcher.Match match : matches) {
+                    channelToGuide.put(match.channelId, match.guideId);
+                }
+                matched = matches.size();
+                events.addAll(EventCatalog.onNow(window, channelToGuide, now));
+            } catch (Throwable failure) {
+                error = String.valueOf(failure.getMessage());
+            }
+            final String failureMessage = error;
+            final int matchedCount = matched;
+            final List<EventCatalog.Event> loaded = events;
+            runOnUiThread(() -> {
+                trigger.setEnabled(true);
+                container.removeAllViews();
+                if (failureMessage != null) {
+                    container.addView(text(getString(R.string.events_error, failureMessage), 13,
+                            COLOR_TEXT_SECONDARY, Typeface.NORMAL), matchWrap());
+                    return;
+                }
+                if (loaded.isEmpty()) {
+                    container.addView(text(getString(R.string.events_empty), 13, COLOR_TEXT_SECONDARY,
+                            Typeface.NORMAL), matchWrap());
+                    container.addView(text(getString(R.string.events_summary, 0, matchedCount), 12,
+                            COLOR_TEXT_SECONDARY, Typeface.NORMAL), matchWrap());
+                    return;
+                }
+                container.addView(text(getString(R.string.events_summary, loaded.size(), matchedCount),
+                        12, COLOR_TEXT_SECONDARY, Typeface.NORMAL), matchWrap());
+                java.text.SimpleDateFormat clock =
+                        new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+                for (EventCatalog.Event event : loaded) {
+                    String time = event.startMillis <= 0 ? "--:--"
+                            : clock.format(new java.util.Date(event.startMillis));
+                    String sport = event.sport() == null ? "" : " · " + event.sport().label();
+                    String line = time + "  " + event.title + "  ·  "
+                            + getResources().getQuantityString(
+                                    R.plurals.events_channel_count, event.channelCount(),
+                                    event.channelCount())
+                            + sport;
+                    container.addView(text(line, 14, COLOR_TEXT_PRIMARY, Typeface.NORMAL), matchWrap());
+                }
+            });
+        }, "hap-events").start();
+    }
+
     private View buildChannelStatusPanel() {
         // Folded, this was the whole of Canales: one header on an otherwise empty screen. It is the
         // section's substance, so it starts open.
@@ -1315,6 +1397,19 @@ public class HapConfigActivity extends Activity {
         Button testList = button(getString(R.string.button_test_list));
         testList.setOnClickListener(v -> checkSelectedList());
         controls.addView(testList, wrapWrapLeft(8));
+
+        // Events live here rather than in a new section: the rail was verified on the box and adding a
+        // fifth entry would have to be re-walked with the D-pad. What is on now belongs next to the
+        // channels anyway.
+        final LinearLayout eventsBody = new LinearLayout(this);
+        eventsBody.setOrientation(LinearLayout.VERTICAL);
+        eventsBody.setVisibility(View.GONE);
+
+        Button eventsButton = button(getString(R.string.button_events));
+        eventsButton.setOnClickListener(v -> loadEvents(eventsBody, eventsButton));
+        controls.addView(eventsButton, wrapWrapLeft(8));
+
+        panel.body.addView(eventsBody, matchWrap());
 
         stopChannelTestButton = button(getString(R.string.button_stop));
         stopChannelTestButton.setEnabled(false);

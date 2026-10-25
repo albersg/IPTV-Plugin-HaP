@@ -381,4 +381,14 @@
     <string name="update_error_verify_version">El APK descargado declara versionCode %1$d, inferior al esperado %2$d.</string>
     <string name="update_error_signature_mismatch">Esta compilación está firmada con una clave distinta a la de la app instalada. Android no puede actualizar una app cambiando la clave de firma: instalarla obligaría a desinstalar HaP primero, lo que borra todas las fuentes, los canales personalizados y los ajustes. No se instaló la actualización y no se cambió nada.</string>
     <string name="update_error_install_session">No se pudo abrir la sesión de instalación: %1$s</string>
+    <string name="button_events">Qué hay ahora</string>
+    <string name="events_loading">Leyendo la guía…</string>
+    <string name="events_empty">Ahora mismo no hay nada para tus canales.</string>
+    <string name="events_no_channels">Carga tus canales primero y luego mira qué hay.</string>
+    <string name="events_summary">%1$d eventos ahora · %2$d canales emparejados con la guía</string>
+    <string name="events_error">No se pudo leer la guía: %1$s</string>
+    <plurals name="events_channel_count">
+        <item quantity="one">%d canal</item>
+        <item quantity="other">%d canales</item>
+    </plurals>
 </resources>

@@ -379,4 +379,14 @@
     <string name="update_error_verify_version">The downloaded APK reports versionCode %1$d, below the expected %2$d.</string>
     <string name="update_error_signature_mismatch">This build is signed with a different key than the installed app. Android cannot update an app across signing keys: installing it would need uninstalling HaP first, which deletes all sources, custom channels and settings. The update was not installed and nothing was changed.</string>
     <string name="update_error_install_session">The install session could not be opened: %1$s</string>
+    <string name="button_events">What’s on now</string>
+    <string name="events_loading">Reading the guide…</string>
+    <string name="events_empty">Nothing on right now for your channels.</string>
+    <string name="events_no_channels">Load your channels first, then ask what is on.</string>
+    <string name="events_summary">%1$d events on now · %2$d channels matched to the guide</string>
+    <string name="events_error">Could not read the guide: %1$s</string>
+    <plurals name="events_channel_count">
+        <item quantity="one">%d channel</item>
+        <item quantity="other">%d channels</item>
+    </plurals>
 </resources>
