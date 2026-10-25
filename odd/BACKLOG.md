@@ -115,14 +115,12 @@ a live tree is dropped. Both would be fixed in `FocusNavigator`, not in the pane
 Until this is fixed and re-verified, the decision to keep Android Views is **not** discharged: the
 reviewer's condition was that navigation and focus demonstrably pass, and they do not yet.
 
-- **Collapsed panels render as empty cards, and this is systemic, not cosmetic.** `Canales` consists
-  of a single "+ Estado de canales" card that fills most of the screen with nothing in it; `Ajustes`
-  shows "+ Avanzado" above a large empty surface with "+ Log" inside it. The collapsible panels kept
-  their header and lost their body, so a section can look like an empty shell. A user opening
-  `Canales` sees no explanation of what the section is for and no way in except the header. This is
-  the most visible remaining flaw after the D-pad, and it needs the collapse mechanism to carry a
-  summary line when closed.
-- **The gear icon reads as a blob** at rail size; the path needs simplifying.
+- **Collapsed panels no longer hollow out their section.** Fixed in `c74a73a`: a folded panel now uses
+half the card padding so it reads as a header row instead of an empty card, and the channel panel -
+which is the whole of Canales - starts open. Verified on the box: Canales opens with its three actions
+and its hint rather than an empty shell. The other folded panels in Ajustes were not walked after the
+change.
+
 - **`Canales`, `Fuentes` and `Ajustes` have not been reviewed visually**, only `Inicio` and
   `Conexiones`. The Fuentes empty state is two buttons and a lot of nothing.
 
