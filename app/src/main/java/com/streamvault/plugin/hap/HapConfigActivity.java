@@ -203,6 +203,10 @@ public class HapConfigActivity extends Activity {
     private TextView eventFeedbackView;
     private InPlaceList<EventCatalog.Event> eventListRef;
     private InPlaceList<ChannelChoice> eventChannelList;
+    private LinearLayout eventChannelsContainer;
+    private LinearLayout eventEventsContainer;
+    private HorizontalScrollView eventFilterScroll;
+    private Button eventBackButton;
     private Button eventRefreshButton;
     private EventRow chosenEventRow;
     private ChannelChoiceRow chosenChannelRow;
@@ -1394,6 +1398,7 @@ public class HapConfigActivity extends Activity {
         filterScroll.addView(filters, new HorizontalScrollView.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         panel.body.addView(filterScroll, matchWrap());
+        eventFilterScroll = filterScroll;
 
         eventFilterAll = chip(getString(R.string.events_filter_all));
         eventFilterAll.setOnClickListener(v -> applyEventFilter(null));
@@ -1412,6 +1417,11 @@ public class HapConfigActivity extends Activity {
         eventRefreshButton = eventsButton;
 
         // The channels of the event the reader picked. Empty until one is picked.
+        eventBackButton = chip(getString(R.string.events_back));
+        eventBackButton.setVisibility(View.GONE);
+        eventBackButton.setOnClickListener(v -> showEventsList());
+        panel.body.addView(eventBackButton, wrapWrap());
+
         eventChannelsHeading = text("", 15, COLOR_TEXT_PRIMARY, Typeface.BOLD);
         eventChannelsHeading.setVisibility(View.GONE);
         eventChannelsHeading.setPadding(0, dp(16), 0, 0);
@@ -1420,12 +1430,14 @@ public class HapConfigActivity extends Activity {
         LinearLayout eventChannelsBody = new LinearLayout(this);
         eventChannelsBody.setOrientation(LinearLayout.VERTICAL);
         panel.body.addView(eventChannelsBody, matchWrap());
+        eventChannelsContainer = eventChannelsBody;
         eventChannelList = new InPlaceList<>(eventChannelsBody, ChannelChoiceRow::new);
 
         eventFeedbackView = text("", 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
         eventFeedbackView.setPadding(0, dp(8), 0, 0);
         panel.body.addView(eventFeedbackView, matchWrap());
         panel.body.addView(eventsBody, matchWrap());
+        eventEventsContainer = eventsBody;
 
         // Nothing is loaded here: every section is built at startup, when the channel list is still empty,
         // so loading now would answer "carga tus canales primero" and never try again. showSection starts
@@ -1482,6 +1494,24 @@ public class HapConfigActivity extends Activity {
         }
     }
 
+    /** Returns from the channels of one event to the full list, restoring the focus where it was. */
+    private void showEventsList() {
+        if (eventEventsContainer != null) eventEventsContainer.setVisibility(View.VISIBLE);
+        if (eventFilterScroll != null) eventFilterScroll.setVisibility(View.VISIBLE);
+        if (eventBackButton != null) eventBackButton.setVisibility(View.GONE);
+        if (eventChannelsHeading != null) {
+            eventChannelsHeading.setVisibility(View.GONE);
+            eventChannelsHeading.setText("");
+        }
+        View backTo = chosenEventRow == null ? null : chosenEventRow.view();
+        hideControl(eventChannelsContainer, backTo);
+        eventChannelList.apply(java.util.Collections.<ChannelChoice>emptyList());
+        if (chosenChannelRow != null) {
+            chosenChannelRow.setChosen(false);
+            chosenChannelRow = null;
+        }
+    }
+
     /** Marks the channel being played, so the reader sees which one of the list was pressed. */
     private void markChosenChannel(ChannelChoiceRow row) {
         if (chosenChannelRow != null && chosenChannelRow != row) chosenChannelRow.setChosen(false);
@@ -1513,6 +1543,14 @@ public class HapConfigActivity extends Activity {
         eventChannelsHeading.setVisibility(View.VISIBLE);
         eventChannelsHeading.setText(getString(R.string.events_channels_for, event.title));
         eventChannelList.apply(choices);
+
+        // One thing on screen at a time: the list is hidden while its channels are shown. hideControl is the
+        // only place allowed to move the focus, and it does it because the control it holds it on disappears.
+        if (eventFilterScroll != null) hideControl(eventFilterScroll, null);
+        if (eventBackButton != null) eventBackButton.setVisibility(View.VISIBLE);
+        View firstChannel = eventChannelsContainer.getChildCount() > 0
+                ? eventChannelsContainer.getChildAt(0) : null;
+        hideControl(eventEventsContainer, firstChannel);
     }
 
     /** One event line. Text only, but focusable so the D-pad can walk the list. */

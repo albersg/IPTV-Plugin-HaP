@@ -47,3 +47,16 @@
 
 Pendiente de ver con datos: cargar una lista en el emulador y comprobar los filtros y el recorrido
 evento → canales → reproducir.
+
+## Verificado en el emulador (con datos reales)
+
+- Canales cargados **sin el motor**: 388 canales de dos listas locales, mediante `M3uParser`.
+- Eventos con datos reales: **19 eventos**, 93 canales emparejados, ordenados por hora.
+- Clasificación corregida y vista en pantalla: `DP World Tour` → Otros, `Tennis: ATP 250 · Grand Prix`
+  → Tenis, `Copa del mundo de escalada` → Otros.
+- La lista **se recorre y se desplaza** con el mando, con barra de resaltado en la fila enfocada.
+- Pulsar un evento muestra `Channels showing this: …` con sus canales reales.
+
+Pendiente: el modo de un solo evento (la lista se oculta y quedan solo sus canales) está implementado y
+con tests, sin captura todavía; y el arranque de un canal desde ahí, que en el emulador acabará en
+"no hay reproductor" porque no hay AceStream instalado.

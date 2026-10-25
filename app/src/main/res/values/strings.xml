@@ -393,4 +393,5 @@
     <string name="events_filter_all">All</string>
     <string name="events_channels_for">Channels showing this: %1$s</string>
     <string name="events_network_error">No connection to the guide and nothing saved yet: %1$s</string>
+    <string name="events_back">Back to events</string>
 </resources>
