@@ -159,6 +159,24 @@ std::string shell_quote_for_log(std::string_view value) {
     return "'" + replace_all(std::string(value), "'", "'\\''") + "'";
 }
 
+std::string redact_request_target(std::string_view target) {
+    auto query = target.find('?');
+    std::string path(target.substr(0, query));
+    auto next_slash = path.find('/', 1);
+    std::string head = next_slash == std::string::npos ? path : path.substr(0, next_slash) + "/...";
+    if (query != std::string_view::npos) head += "?<redacted>";
+    return head;
+}
+
+std::string redact_url(std::string_view url) {
+    auto scheme_end = url.find("://");
+    if (scheme_end == std::string_view::npos) return "<redacted>";
+    auto host_start = scheme_end + 3;
+    auto host_end = url.find_first_of("/?#", host_start);
+    std::string kept(url.substr(0, host_end == std::string_view::npos ? url.size() : host_end));
+    return kept + "/...";
+}
+
 std::string basename_no_ext(std::string_view path) {
     std::string s(path);
     auto slash = s.find_last_of("/\\");

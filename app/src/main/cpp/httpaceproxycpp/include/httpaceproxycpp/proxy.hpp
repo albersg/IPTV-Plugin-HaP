@@ -7,6 +7,7 @@
 #include "httpaceproxycpp/http_server.hpp"
 #include "httpaceproxycpp/plugins.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -55,6 +56,9 @@ private:
     std::mutex ace_status_mutex_;
     std::chrono::steady_clock::time_point ace_status_time_{};
     Json ace_status_cache_;
+    // Peer checks open a real P2P session each and never enter BroadcastManager, so the channel
+    // and connection limits do not see them. This bounds them on their own.
+    std::atomic<int> peer_checks_{0};
 };
 
 } // namespace httpace

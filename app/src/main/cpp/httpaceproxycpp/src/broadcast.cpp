@@ -131,7 +131,8 @@ void Broadcast::stream_loop() {
     try {
         auto started = ace_->start_broadcast(start_params_);
         auto url = rewrite_url_host_port(url_decode(started.url), config_.ace_host, std::to_string(config_.ace_http_port));
-        log_line("INFO", "[" + infohash_.substr(0, 8) + "] stream URL " + url);
+        // Security: the resolved stream URL can embed a token or credentials.
+        log_line("INFO", "[" + infohash_.substr(0, 8) + "] stream URL " + redact_url(url));
         if (ends_with(parse_url(url).path, ".m3u8")) stream_hls_url(url);
         else stream_http_url(url);
     } catch (const std::exception& e) {

@@ -272,7 +272,10 @@ std::string effective_client_address(const HttpRequest& request) {
 } // namespace
 
 void Proxy::handle_http(const HttpRequest& request, ClientConnection& connection) {
-    log_line("INFO", "[" + request.client_ip + "] " + request.method + " " + request.target);
+    // Security: the target can be a percent-encoded provider URL, credentials included. The log
+    // keeps the endpoint and the client, and drops the rest.
+    log_line("INFO", "[" + request.client_ip + "] " + request.method + " "
+            + redact_request_target(request.target));
     if (config_.firewall && !check_firewall(effective_client_address(request))) {
         send_error(connection, 401, "Dropping connection due to firewall rules");
         return;
@@ -661,6 +664,29 @@ Json Proxy::check_channel_light(const std::string& plugin_name, const std::strin
 
 Json Proxy::check_channel_peers(const std::string& content_id, int max_wait, const ClientConnection* connection) {
     if (content_id.empty()) return Json::object{{"status", "error"}, {"error", "content_id required"}};
+    // Security: a peer check starts a broadcast and polls it for seconds. The channel and connection
+    // limits do not cover it, so without this cap one LAN host could hold dozens of P2P sessions open.
+    constexpr int kMaxConcurrentPeerChecks = 2;
+    struct PeerCheckSlot {
+        std::atomic<int>& counter;
+        bool taken;
+        explicit PeerCheckSlot(std::atomic<int>& c) : counter(c) {
+            int current = counter.load();
+            taken = false;
+            while (current < kMaxConcurrentPeerChecks) {
+                if (counter.compare_exchange_weak(current, current + 1)) {
+                    taken = true;
+                    break;
+                }
+            }
+        }
+        ~PeerCheckSlot() {
+            if (taken) counter.fetch_sub(1);
+        }
+    } slot(peer_checks_);
+    if (!slot.taken) {
+        return Json::object{{"status", "error"}, {"error", "too many concurrent peer checks, try again later"}};
+    }
     try {
         AceClient ace(config_, "PeerCheck_" + content_id.substr(0, 8));
         // RAII: any exit path (success, timeout, client disconnect, exception) stops the

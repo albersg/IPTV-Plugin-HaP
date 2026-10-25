@@ -21,6 +21,15 @@ std::string url_encode(std::string_view value, std::string_view safe = "");
 std::map<std::string, std::string> parse_query(std::string_view query);
 std::string query_get(std::string_view query, std::string_view key, std::string_view fallback = "");
 std::string shell_quote_for_log(std::string_view value);
+
+// Redacts the part of an HTTP request target that can carry data: the path beyond its first
+// segment (a provider URL lives there, percent-encoded) and the whole query string. Keeps the
+// first segment so a log still says which endpoint was called.
+std::string redact_request_target(std::string_view target);
+
+// Keeps scheme, host and port of a URL and drops the rest, which is where tokens and credentials
+// travel. Returns "<redacted>" when there is no scheme to keep.
+std::string redact_url(std::string_view url);
 std::string basename_no_ext(std::string_view path);
 std::string extension_of(std::string_view path);
 std::string mime_type_for_path(std::string_view path);

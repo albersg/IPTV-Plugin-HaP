@@ -276,3 +276,28 @@ TEST(RegexEscapeTest, EscapesMetacharacters) {
     EXPECT_EQ(std::regex_match("a.b*c", std::regex(escaped)), true);
     EXPECT_EQ(std::regex_match("axbxc", std::regex(escaped)), false);
 }
+
+// --- Redaction: log lines must not carry provider URLs or credentials -------------------------
+
+TEST(RedactRequestTarget, KeepsTheEndpointAndDropsTheRest) {
+    EXPECT_EQ(httpace::redact_request_target("/aio"), "/aio");
+    EXPECT_EQ(httpace::redact_request_target("/url/http%3A%2F%2Fuser%3Apass%40host%2Fx.m3u8"),
+              "/url/...");
+}
+
+TEST(RedactRequestTarget, DropsEveryQueryValue) {
+    EXPECT_EQ(httpace::redact_request_target("/statplugin?action=check_peers&format=json"),
+              "/statplugin?<redacted>");
+    EXPECT_EQ(httpace::redact_request_target("/url/abc?token=secret"), "/url/...?<redacted>");
+}
+
+TEST(RedactUrl, KeepsSchemeHostAndPortOnly) {
+    EXPECT_EQ(httpace::redact_url("http://example.com/live/user/pass/1.ts"),
+              "http://example.com/...");
+    EXPECT_EQ(httpace::redact_url("https://host.tld:8443/x?token=abc"),
+              "https://host.tld:8443/...");
+}
+
+TEST(RedactUrl, RefusesToEchoSomethingWithoutAScheme) {
+    EXPECT_EQ(httpace::redact_url("not a url with a secret"), "<redacted>");
+}

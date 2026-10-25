@@ -98,6 +98,10 @@ protected:
     std::vector<std::string> epg_urls_;
     std::string etag_;
     std::chrono::steady_clock::time_point playlist_time_;
+    // One refresh at a time, plus when the last attempt happened, so a permanently failing source
+    // does not re-run the whole outbound fetch on every request.
+    std::mutex refresh_mutex_;
+    std::chrono::steady_clock::time_point playlist_attempt_{};
     std::thread updater_;
     bool stop_updater_ = false;
     std::mutex updater_mutex_;

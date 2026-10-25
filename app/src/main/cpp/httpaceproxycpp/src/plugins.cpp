@@ -291,11 +291,37 @@ std::vector<std::string> PlaylistPlugin::epg_urls() {
     return epg_urls_;
 }
 
+namespace {
+// A loaded playlist is reused for half an hour; a failed attempt waits before retrying so a dead
+// source cannot be hammered by request traffic.
+constexpr auto kRefreshInterval = std::chrono::minutes(30);
+constexpr auto kFailureBackoff = std::chrono::seconds(30);
+} // namespace
+
 bool PlaylistPlugin::refresh_if_needed() {
+    auto up_to_date = [this](std::chrono::steady_clock::time_point now) {
+        return !playlist_.empty() && now - playlist_time_ < kRefreshInterval;
+    };
+    auto backing_off = [this](std::chrono::steady_clock::time_point now) {
+        return playlist_.empty() && now - playlist_attempt_ < kFailureBackoff;
+    };
+
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto age = std::chrono::steady_clock::now() - playlist_time_;
-        if (!playlist_.empty() && age < std::chrono::minutes(30)) return true;
+        auto now = std::chrono::steady_clock::now();
+        if (up_to_date(now)) return true;
+        if (backing_off(now)) return false;
+    }
+    // Security: only one refresh runs at a time. Before this, every unauthenticated request re-ran
+    // the whole outbound fetch while the playlist was still empty, so a LAN client could keep the
+    // fetchers busy without limit.
+    std::lock_guard<std::mutex> flight(refresh_mutex_);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto now = std::chrono::steady_clock::now();
+        if (up_to_date(now)) return true;      // the winner filled it while we waited
+        if (backing_off(now)) return false;
+        playlist_attempt_ = now;
     }
     try { return refresh(); } catch (const std::exception& e) {
         log_line("ERROR", "[" + plugin_name_ + "] refresh failed: " + e.what());
