@@ -46,7 +46,7 @@ public final class HomeScreen {
     }
 
     private final Activity activity;
-    private final ScrollView root;
+    private final LinearLayout root;
 
     /**
      * The first-run card. Created once and hidden, so offering it and taking the offer away is a
@@ -78,16 +78,20 @@ public final class HomeScreen {
     public HomeScreen(Activity activity, Listener listener, View statusCardBody) {
         this.activity = activity;
 
-        LinearLayout content = column();
-        content.setPadding(0, 0, 0, space(R.dimen.hap_gap_block));
-
+        // The page title and its subtitle sit outside the scrolling area. Inside it, focusing a card
+        // below scrolled the title to the very edge and sliced its glyphs in half, which reads as a
+        // rendering fault rather than as a scroll.
+        LinearLayout header = column();
         TextView title = label(R.string.home_title, R.style.TextAppearance_HaP_Display);
-        content.addView(title, matchWrap());
+        header.addView(title, matchWrap());
 
         TextView subtitle = label(R.string.home_subtitle, R.style.TextAppearance_HaP_Body);
         subtitle.setTextColor(color(R.color.hap_text_muted));
         subtitle.setPadding(0, space(R.dimen.hap_gap_row), 0, 0);
-        content.addView(subtitle, matchWrap());
+        header.addView(subtitle, matchWrap());
+
+        LinearLayout content = column();
+        content.setPadding(0, space(R.dimen.hap_gap_block), 0, space(R.dimen.hap_gap_block));
 
         // 1. Status card: heading with the status dot, the two plain-language lines, and the
         // existing header panel (start/stop, restart, prepare) that keeps its behaviour.
@@ -197,14 +201,19 @@ public final class HomeScreen {
         servicesCard.addView(servicesRow, matchWrap());
         content.addView(servicesCard, top(matchWrap(), R.dimen.hap_gap_row));
 
-        root = new ScrollView(activity);
-        root.setFillViewport(false);
-        root.setFocusable(false);
-        root.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
-        root.addView(content, new ScrollView.LayoutParams(
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(false);
+        scroll.setFocusable(false);
+        scroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        scroll.addView(content, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
+
+        root = column();
+        root.addView(header, matchWrap());
+        root.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         // A first, honest paint instead of an empty card if no snapshot has arrived yet.
         applyServices(HapServiceStates.of(false, false, false, false, false, false, false));

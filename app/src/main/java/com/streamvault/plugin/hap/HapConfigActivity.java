@@ -464,11 +464,9 @@ public class HapConfigActivity extends Activity {
     private View buildSectionView(HapSections.Section section) {
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
-        // Every section announces itself, the way Inicio does: without this the user lands on a
-        // stack of cards with no idea which part of HaP they are looking at.
-        column.addView(sectionHeading(section), matchWrap());
         for (HapSections.Panel panel : HapSections.panels(section)) {
-            column.addView(buildPanel(panel), matchWrapTop(20));
+            column.addView(buildPanel(panel),
+                    column.getChildCount() == 0 ? matchWrapTop(20) : matchWrapTop(20));
         }
 
         ScrollView scroll = new ScrollView(this);
@@ -479,7 +477,15 @@ public class HapConfigActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
-        return scroll;
+
+        // The title stays outside the scroll: focusing a card used to scroll it to the edge and cut
+        // its glyphs in half, which looks like a fault rather than a scroll.
+        LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.addView(sectionHeading(section), matchWrap());
+        wrapper.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        return wrapper;
     }
 
     /** Maps a panel of {@link HapSections} to its existing builder; nothing is re-implemented. */
