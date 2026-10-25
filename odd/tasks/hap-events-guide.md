@@ -60,3 +60,23 @@ evento → canales → reproducir.
 Pendiente: el modo de un solo evento (la lista se oculta y quedan solo sus canales) está implementado y
 con tests, sin captura todavía; y el arranque de un canal desde ahí, que en el emulador acabará en
 "no hay reproductor" porque no hay AceStream instalado.
+
+### Verificación completa en el emulador (noche)
+
+Todo lo siguiente se vio en pantalla, con dos listas reales (388 canales) y la guía real:
+
+| Comprobación | Resultado |
+| --- | --- |
+Canales sin motor | 388 canales leídos del fichero, servidor parado |
+Eventos con datos | 19–20 eventos, 93 canales emparejados, orden por hora |
+Filtro Fútbol | 20 → **6 eventos**, y el resumen pasa a «6 events on now» |
+Recorrido con mando | DOWN desplaza y la fila enfocada lleva barra de resaltado |
+Pulsar un evento | La lista se oculta y quedan sus canales, foco en el primero |
+Volver | «Back to events» devuelve a la lista con el mismo filtro |
+Repetición | Volver a entrar es **instantáneo**: no relee la guía (caché de 30 min) |
+Sin reproductor | El intento sale como `acestream://…` y la pantalla lo avisa |
+Traducciones | 364 cadenas en EN y 364 en ES, ninguna huérfana |
+Lint | sin errores |
+
+Un detalle conocido: en el emulador **los toques no disparan las filas** aunque el D-pad sí; la navegación
+está pensada para mando y así se verificó.
