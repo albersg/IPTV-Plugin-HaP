@@ -1225,7 +1225,9 @@ public class HapConfigActivity extends Activity {
     }
 
     private View buildChannelStatusPanel() {
-        PanelViews panel = panel(getString(R.string.section_channel_status), true, false);
+        // Folded, this was the whole of Canales: one header on an otherwise empty screen. It is the
+        // section's substance, so it starts open.
+        PanelViews panel = panel(getString(R.string.section_channel_status), true, true);
 
         HorizontalScrollView controlsScroll = new HorizontalScrollView(this);
         controlsScroll.setHorizontalScrollBarEnabled(false);
@@ -3545,7 +3547,12 @@ public class HapConfigActivity extends Activity {
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
         int cardPadding = getResources().getDimensionPixelSize(R.dimen.hap_card_padding);
-        container.setPadding(cardPadding, cardPadding, cardPadding, cardPadding);
+        // A collapsed panel is a header, not a card: keeping the full card padding around a single
+        // folded line left a hole the size of a card, which is what made whole sections look empty.
+        int tightPadding = Math.round(cardPadding / 2f);
+        boolean folded = collapsible && !expandedByDefault;
+        container.setPadding(cardPadding, folded ? tightPadding : cardPadding,
+                cardPadding, folded ? tightPadding : cardPadding);
         // The shared state list: a panel that becomes focusable uses the same focus language.
         container.setBackgroundResource(R.drawable.bg_panel);
 
@@ -3566,6 +3573,8 @@ public class HapConfigActivity extends Activity {
                     boolean expanded = body.getVisibility() == View.VISIBLE;
                     body.setVisibility(expanded ? View.GONE : View.VISIBLE);
                     header.setText((expanded ? "+ " : "- ") + title);
+                    int vertical = expanded ? tightPadding : cardPadding;
+                    container.setPadding(cardPadding, vertical, cardPadding, vertical);
                 });
             }
             container.addView(header, matchWrap());
