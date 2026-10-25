@@ -201,6 +201,12 @@ public class HapConfigActivity extends Activity {
     private InPlaceList<HapRows.Source> sourceList;
     private InPlaceList<HapRows.CustomChannel> customChannelList;
     private TextView eventFeedbackView;
+    private InPlaceList<EventCatalog.Event> eventListRef;
+    private List<EventCatalog.Event> currentEvents = new ArrayList<>();
+    private final Map<EventSport.Kind, Button> eventFilterButtons =
+            new java.util.EnumMap<>(EventSport.Kind.class);
+    private Button eventFilterAll;
+    private EventSport.Kind eventFilter;
     private InPlaceList<HapRows.Client> clientList;
     private InPlaceList<HapRows.PluginTab> pluginTabList;
     /**
@@ -1306,6 +1312,23 @@ public class HapConfigActivity extends Activity {
      * <p>Off the main thread: reading the guide from disk and parsing it is not instant, and on the device
      * a cold download took 96.8 seconds. Nothing here touches the network on the main thread.
      */
+    /** Keeps only the chosen sport and repaints; null shows everything. */
+    private void applyEventFilter(EventSport.Kind kind) {
+        eventFilter = kind;
+        if (eventListRef != null) {
+            eventListRef.apply(EventCatalog.matching(currentEvents, "", kind));
+        }
+    }
+
+    /** Offers only the sports that are actually on now, and clears a filter that no longer applies. */
+    private void refreshEventFilters(List<EventCatalog.Event> events) {
+        List<EventSport.Kind> present = EventCatalog.sports(events);
+        for (Map.Entry<EventSport.Kind, Button> entry : eventFilterButtons.entrySet()) {
+            entry.getValue().setVisibility(present.contains(entry.getKey()) ? View.VISIBLE : View.GONE);
+        }
+        if (eventFilter != null && !present.contains(eventFilter)) eventFilter = null;
+    }
+
     /** Shows what the events section is doing: reading, empty, failed, or how many are on. */
     private void setEventFeedback(String message) {
         if (eventFeedbackView == null) return;
@@ -1319,6 +1342,33 @@ public class HapConfigActivity extends Activity {
         eventsBody.setOrientation(LinearLayout.VERTICAL);
         InPlaceList<EventCatalog.Event> eventList =
                 new InPlaceList<>(eventsBody, EventRow::new);
+        eventListRef = eventList;
+
+        // One row of filters, built once. Buttons for sports that are not on stay hidden, so nothing is
+        // ever emptied and refilled.
+        HorizontalScrollView filterScroll = new HorizontalScrollView(this);
+        filterScroll.setHorizontalScrollBarEnabled(false);
+        filterScroll.setFocusable(false);
+        filterScroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        LinearLayout filters = new LinearLayout(this);
+        filters.setOrientation(LinearLayout.HORIZONTAL);
+        filters.setGravity(Gravity.CENTER_VERTICAL);
+        filterScroll.addView(filters, new HorizontalScrollView.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        panel.body.addView(filterScroll, matchWrap());
+
+        eventFilterAll = button(getString(R.string.events_filter_all));
+        eventFilterAll.setOnClickListener(v -> applyEventFilter(null));
+        filters.addView(eventFilterAll, wrapWrap());
+        boolean first = true;
+        for (EventSport.Kind kind : EventSport.Kind.values()) {
+            Button chip = button(kind.label());
+            chip.setOnClickListener(v -> applyEventFilter(kind));
+            chip.setVisibility(View.GONE);
+            filters.addView(chip, wrapWrapLeft(8));
+            eventFilterButtons.put(kind, chip);
+            first = false;
+        }
 
         Button eventsButton = button(getString(R.string.button_events));
         eventsButton.setOnClickListener(v -> loadEvents(eventList, eventsButton));
@@ -1416,7 +1466,9 @@ public class HapConfigActivity extends Activity {
                     return;
                 }
                 setEventFeedback(getString(R.string.events_summary, loaded.size(), matchedCount));
-                list.apply(loaded);
+                currentEvents = loaded;
+                refreshEventFilters(loaded);
+                list.apply(EventCatalog.matching(loaded, "", eventFilter));
             });
         }, "hap-events").start();
     }
