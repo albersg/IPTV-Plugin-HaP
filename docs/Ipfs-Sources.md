@@ -33,6 +33,39 @@ probar. Sus dos problemas:
 - **Cuenta quién pregunta.** Para servirte el contenido, la pasarela ve tu IP y el CID. Eso es
   exactamente lo que un nodo local evita.
 
+## Cómo servir una lista con el Kubo embebido
+
+Verificado en la caja: el gateway embebido trae contenido de la red IPFS (`HTTP 200` para un CID de
+prueba). Los pasos, de principio a fin:
+
+1. En el PC, publica la lista en IPFS y apunta el CID:
+
+   ```bash
+   ipfs add lista-unificada.m3u
+   # added bafk... lista-unificada.m3u  -> ese es el CID
+   ```
+
+2. Mantén el contenido accesible. Si tu nodo deja de anunciarlo, la caja no podrá traerlo:
+
+   ```bash
+   ipfs pin add <CID>
+   ```
+
+3. En la caja, `Ajustes` → `IPFS` → activa el interruptor. Espera a que el estado deje de estar en
+   `Parado`. El gateway queda en `http://127.0.0.1:8080`.
+
+4. En `Fuentes`, añade una fuente con la URL del gateway y el CID:
+
+   ```
+   http://127.0.0.1:8080/ipfs/<CID>
+   ```
+
+5. Comprueba que se sirve: con el servidor de HaP en marcha, `http://127.0.0.1:8888/userm3u` debe
+   listar los canales de la lista.
+
+La lista se actualiza en el momento, sin caché de terceros, y ningún intermediario ve qué CID pides.
+Si en algún momento añades una versión nueva, el CID cambia: vuelve a añadir la fuente con el nuevo.
+
 ## Límite que no cambia con nada de esto
 
 IPFS solo afecta a **la lista**. Los canales dentro de ella siguen apuntando a los servidores del

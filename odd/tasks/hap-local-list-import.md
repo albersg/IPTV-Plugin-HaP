@@ -74,6 +74,26 @@ La función se entrega como una sola unidad: el lector nativo, el tipo de fuente
 pantalla que la crea son un mismo comportamiento, y separarlos dejaría tests sin el código que prueban.
 Los dos commits del trabajo suman unas 900 líneas y van juntos en el mismo PR.
 
+### El selector de archivos: veredicto
+
+El intent se disparó y el log de la caja mostró qué pasaba de verdad:
+
+```
+START u0 {act=GET_CONTENT cat=[OPENABLE] typ=*/* cmp=...photopicker.PhotoPickerGetContentActivity}
+START u0 {act=GET_CONTENT cat=[OPENABLE] typ=*/* cmp=com.android.tv.frameworkpackagestubs/.Stubs$DocumentsStub}
+```
+
+Con `*/*` el sistema ofrece el **selector de fotos** y luego cae al **stub** de Android TV. Un botón que
+lleva ahí es peor que no tenerlo, así que:
+
+- el intent pide ahora tipos de lista (`audio/x-mpegurl`, `application/vnd.apple.mpegurl`, …), que el
+  selector de fotos no reclama;
+- cuando solo responde el stub, `canPickFile()` es falso y **el botón no se muestra**;
+- si algún día resolviera a algo que no llega a abrirse, una guarda de 2,5 s comprueba si la ventana
+  perdió el foco y, si no, avisa de que no hubo explorador y remite a la carpeta.
+
+En esta caja el botón, por tanto, no aparece: la vía es la carpeta, y está verificada.
+
 ### Lo que no se probó
 
 - El selector `GET_CONTENT`: en esta caja resuelve, y el botón `Importar archivo` aparece, pero no se

@@ -176,6 +176,7 @@
     <string name="message_adding_device_list">Adding the list...</string>
     <string name="message_removing_device_list">Removing the list...</string>
     <string name="message_importing_file">Importing the file...</string>
+    <string name="message_use_folder_instead">No file picker answered. Copy the .m3u into the folder shown above.</string>
     <string name="error_no_file_picker">This device has no file picker. Put the file in the folder shown above instead.</string>
     <string name="error_device_list_cleanup">Could not remove the incomplete copy of %1$s.</string>
     <string name="status_device_list_added">in use</string>

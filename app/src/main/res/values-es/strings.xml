@@ -176,6 +176,7 @@
     <string name="message_adding_device_list">Añadiendo la lista...</string>
     <string name="message_removing_device_list">Quitando la lista...</string>
     <string name="message_importing_file">Importando el archivo...</string>
+    <string name="message_use_folder_instead">Ningún explorador respondió. Copia el .m3u en la carpeta de arriba.</string>
     <string name="error_no_file_picker">Este dispositivo no tiene explorador de archivos. Copia el archivo en la carpeta de arriba.</string>
     <string name="error_device_list_cleanup">No se pudo borrar la copia incompleta de %1$s.</string>
     <string name="status_device_list_added">en uso</string>

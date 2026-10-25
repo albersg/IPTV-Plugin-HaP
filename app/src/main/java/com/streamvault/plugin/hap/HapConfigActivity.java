@@ -240,6 +240,8 @@ public class HapConfigActivity extends Activity {
     private TextView deviceListsEmptyView;
     private Button deviceImportButton;
     private InPlaceList<DeviceListModel> deviceList;
+    /** True once another screen took the window, which is how a real picker announces itself. */
+    private boolean pickerTookFocus;
     private List<HapBridge.CustomChannelInfo> currentCustomChannels = new ArrayList<>();
     private List<HapBridge.PluginChannelsInfo> channelPlugins = new ArrayList<>();
     private String editingM3uSourceId = "";
@@ -345,6 +347,8 @@ public class HapConfigActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        // Any other screen taking over is the only proof a picker really opened.
+        if (!hasFocus) pickerTookFocus = true;
         if (destroyed || focusNavigator == null) return;
         if (hasFocus) focusNavigator.restoreFocus();
         else focusNavigator.rememberFocus();
@@ -2490,16 +2494,36 @@ public class HapConfigActivity extends Activity {
     private Intent pickListIntent() {
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
+        // Asking for */* on Android 13+ lets the photo picker answer, and a playlist is not a photo:
+        // the box logged exactly that, then fell through to the television document stub. Naming the
+        // playlist types keeps both out of the way.
+        intent.setType("audio/x-mpegurl");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "audio/x-mpegurl",
+                "audio/mpegurl",
+                "application/vnd.apple.mpegurl",
+                "application/x-mpegurl",
+                "application/octet-stream"
+        });
         return intent;
     }
 
     private void pickLocalList() {
+        pickerTookFocus = false;
         try {
             startActivityForResult(pickListIntent(), REQUEST_PICK_DEVICE_LIST);
         } catch (ActivityNotFoundException e) {
             showSourceFeedback(getString(R.string.error_no_file_picker), COLOR_ERROR);
+            return;
         }
+        // resolveActivity() is not evidence that a picker opens: on this box it resolves to a
+        // handler that never comes to the front. If the window never lost focus, the button did
+        // nothing, which is worse than saying so.
+        handler.postDelayed(() -> {
+            if (pickerTookFocus || destroyed) return;
+            showMessage(getString(R.string.message_use_folder_instead));
+            showSourceFeedback(getString(R.string.message_use_folder_instead), COLOR_ERROR);
+        }, 2500);
     }
 
     @Override
