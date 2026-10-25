@@ -1,6 +1,7 @@
 package com.streamvault.plugin.hap;
 
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.view.KeyEvent;
@@ -70,6 +71,32 @@ public class RailFocusTest {
      * settled without more digging, and a test that asserts either answer would be a guess. It stays as a
      * real-device check until that is understood.
      */
+    @Test
+    public void clickingEventosSelectsEventosAndNotInicio() {
+        // This is the exact defect seen on the box: navItemId had no case for the new section, so it fell
+        // through to the home id, the Inicio row took the events icon and pressing it opened Eventos. The
+        // row's own selected state is what tells the two apart, and it needs no window attached.
+        HapConfigActivity activity = launch();
+        View events = activity.findViewById(R.id.hap_nav_events);
+        assertNotNull("Eventos needs a rail row of its own", events);
+
+        events.performClick();
+        ShadowLooper.idleMainLooper();
+        assertTrue("pressing Eventos must select Eventos", events.isSelected());
+        assertFalse("pressing Eventos must not select Inicio",
+                activity.findViewById(R.id.hap_nav_home).isSelected());
+    }
+
+    @Test
+    public void clickingCanalesSelectsCanalesOnly() {
+        HapConfigActivity activity = launch();
+        View channels = activity.findViewById(R.id.hap_nav_channels);
+        channels.performClick();
+        ShadowLooper.idleMainLooper();
+        assertTrue(channels.isSelected());
+        assertFalse(activity.findViewById(R.id.hap_nav_events).isSelected());
+    }
+
     /**
      * Key-driven rail movement is NOT asserted here, and the reason is worth writing down.
      *
