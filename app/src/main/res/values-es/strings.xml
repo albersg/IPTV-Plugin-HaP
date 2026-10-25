@@ -78,6 +78,8 @@
     <string name="button_cancel">Cancelar</string>
     <string name="button_edit">Editar</string>
     <string name="button_delete">Borrar</string>
+    <string name="hint_search_channel">Buscar canal</string>
+    <string name="message_no_matching_channels">Ningún canal coincide con «%1$s».</string>
     <string name="message_no_sources">Aún no hay fuentes añadidas.</string>
     <string name="section_custom_channels">Canales custom</string>
     <string name="label_channel_name">Nombre del canal</string>

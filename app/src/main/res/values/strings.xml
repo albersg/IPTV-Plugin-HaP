@@ -78,6 +78,8 @@
     <string name="button_cancel">Cancel</string>
     <string name="button_edit">Edit</string>
     <string name="button_delete">Delete</string>
+    <string name="hint_search_channel">Search channel</string>
+    <string name="message_no_matching_channels">No channel matches "%1$s".</string>
     <string name="message_no_sources">No sources added yet.</string>
     <string name="section_custom_channels">Custom channels</string>
     <string name="label_channel_name">Channel name</string>

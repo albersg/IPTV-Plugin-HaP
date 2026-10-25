@@ -23,7 +23,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.text.InputType;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.text.method.ScrollingMovementMethod;
 import android.util.SparseArray;
 import android.view.Gravity;
@@ -205,6 +207,9 @@ public class HapConfigActivity extends Activity {
      * only ever receives a new model through {@code submitList}.
      */
     private RecyclerView channelRecycler;
+    private EditText channelSearchEdit;
+    /** What the search field holds; empty means the whole list. */
+    private String channelQuery = "";
     private ChannelAdapter channelAdapter;
     private Button stopChannelTestButton;
     private TextView logView;
@@ -1354,6 +1359,32 @@ public class HapConfigActivity extends Activity {
         // page: that bounded viewport is what keeps only the visible rows measured and attached,
         // and it is why the D-pad hand-off in FocusNavigator exists.
         listParams.height = getResources().getDimensionPixelSize(R.dimen.hap_channel_list_height);
+        // The search field lives above the list: on a television the list can be hundreds of rows and
+        // scrolling to a channel by hand is the slowest part of using it.
+        channelSearchEdit = editText(getString(R.string.hint_search_channel), false);
+        channelSearchEdit.setSingleLine(true);
+        LinearLayout.LayoutParams searchParams = matchWrapTop(12);
+        panel.body.addView(channelSearchEdit, searchParams);
+        channelSearchEdit.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String next = s == null ? "" : s.toString();
+                if (next.equals(channelQuery)) return;
+                channelQuery = next;
+                // Filtering repaints rows only: it never moves focus, which is what keeps the D-pad
+                // steady while the user types.
+                renderChannels();
+            }
+        });
+
         channelRecycler = new RecyclerView(this);
         channelRecycler.setLayoutManager(new LinearLayoutManager(this));
         // A peer result must repaint its row, not fade it out from under the user's focus.
@@ -2937,6 +2968,7 @@ public class HapConfigActivity extends Activity {
 
         List<HapRows.Channel> rows = new ArrayList<>(selectedPlugin.channels.size());
         for (HapBridge.ChannelInfo channel : selectedPlugin.channels) {
+            if (!ChannelSearch.matches(channel.name, channelQuery)) continue;
             HapBridge.PeerResultInfo result = peerResults.get(channel.contentId);
             boolean selected = channel.contentId.equals(selectedChannelContentId);
             rows.add(new HapRows.Channel(
@@ -2949,6 +2981,15 @@ public class HapConfigActivity extends Activity {
                     result == null ? 0 : (result.available ? COLOR_SUCCESS_MUTED : COLOR_SURFACE),
                     result == null ? 0 : (result.available ? COLOR_SUCCESS : COLOR_TEXT_TERTIARY)
             ));
+        }
+        // An empty result is the search's doing, not an empty source: say which, or the user is left
+        // looking at a blank space with no explanation.
+        if (rows.isEmpty() && !channelQuery.trim().isEmpty()) {
+            channelsHintView.setText(getString(R.string.message_no_matching_channels, channelQuery.trim()));
+            applyVisibility(channelsHintView, true);
+        } else {
+            channelsHintView.setText(getString(R.string.message_load_channels_hint));
+            applyVisibility(channelsHintView, false);
         }
         // A fresh list every time: the differ keeps the one it was given, so nothing may mutate it.
         channelAdapter.submitList(rows);
