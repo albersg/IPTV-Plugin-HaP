@@ -117,6 +117,11 @@ public class ProxySupervisorService extends Service {
             aceServe.prepare();
 
             ServiceState.phase("Starting AceServe");
+            // Another app holding the engine port is the difference between a sentence and a 31-second
+            // timeout on every channel. Ask before starting, and say so instead of waiting.
+            String occupied = EnginePortGuard.describeOccupiedPort(
+                    EnginePortGuard.isHeld(EnginePortGuard.ENGINE_PORT), aceServe.isRunning());
+            if (!occupied.isEmpty()) throw new IllegalStateException(occupied);
             aceServe.start();
             ServiceState.aceRunning = waitForAceServe();
             if (!ServiceState.aceRunning) throw new IllegalStateException("AceServe did not open local ports");
