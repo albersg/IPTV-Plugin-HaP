@@ -155,3 +155,22 @@ therefore record on-device validation as pending, not as passed.
 `FocusChain.java`, `FocusGrid.java`, an `HapConfigActivity` change and a test, produced before
 the device was disconnected and therefore never verified on hardware. Treat it as unproven input;
 reuse only what the new shell makes obviously correct.
+
+**L10 — slice evidence and the next brief.** `b2e53ee` delivered T1-T4 and the S6 groundwork:
+design system, `activity_hap.xml` rail shell, `HomeScreen`, and all eleven panel builders
+re-parented exactly once as pinned by `HapSectionsTest`. Design decisions taken there that later
+slices must respect: TV dimens live in `values-w600dp` rather than `values-sw600dp` because a TV
+box reports 960x540dp, where smallest-width would not match; rail selection and rail focus are
+separate states rendered by two drawables at once; `removeAllViews()` remains in eight list
+renderers (endpoints, sources, custom, clients, tabs, channel rows, ipfs gateway, and one client
+refresh) and is T7's subject, not a regression.
+
+T6 brief: finish the deterministic focus chain. Focus must survive the 1 Hz refresh and async
+results, scroll must follow focus inside each section's scroll view, the last focused view per
+section must be restored when returning, and the rail's UP/DOWN must not jump out of the rail.
+`stash@{0}` holds unverified `FocusChain`/`FocusGrid` work; read it for ideas but re-derive against
+the real view tree rather than applying it blindly.
+
+T7 brief: replace the eight `removeAllViews()` renderers with in-place updates or a recycler where
+the list can grow, keeping stable identities so focus is not lost. Measure by reasoning about
+allocation counts per refresh; no device is available to measure jank.
