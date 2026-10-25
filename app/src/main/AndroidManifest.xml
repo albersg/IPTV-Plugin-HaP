@@ -70,9 +70,25 @@
             android:label="@string/first_run_title"
             android:theme="@style/AppTheme" />
 
+        <!--
+            D1: the StreamVault plugin service is CLOSED, so the plugin integration is inactive.
+
+            It has to be unreachable because it authorised nobody: any installed app could bind
+            com.streamvault.plugin.API and start/stop the runtime, enable LAN exposure and read the
+            stored provider URLs, credentials included. Neither check that would fix that can work
+            here — this fork is signed with a different key than StreamVault (so a signature
+            permission would refuse the legitimate caller) and StreamVault is not installed on the
+            device this build targets (so a package allowlist has no host to name).
+
+            Reopening is a deliberate one-line act, once StreamVault is installed: change
+            android:exported="false" to android:exported="true" on this service. Nothing else is
+            needed — the intent filter, the Binder ABI in StreamVaultHapPluginService and every
+            com.streamvault.plugin.* metadata value below are kept exactly as they were, so
+            reopening restores the integration with no other edit.
+        -->
         <service
             android:name=".StreamVaultHapPluginService"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.streamvault.plugin.API" />
             </intent-filter>

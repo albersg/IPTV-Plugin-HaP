@@ -171,9 +171,17 @@ public class StreamVaultHapPluginService extends Service {
         response.putBoolean(PluginContract.KEY_SUCCESS, true);
         response.putString(PluginContract.KEY_OUTPUT_URL, localUrl);
         response.putString(PluginContract.KEY_MESSAGE, getString(R.string.message_playback_ready));
-        android.util.Log.d("HaP-TSF", "handlePreparePlayback output_url=" + localUrl + " original=" + url);
+        android.util.Log.d("HaP-TSF", "handlePreparePlayback proxy started");
     }
 
+    /**
+     * The local TS proxy for one prepared playback.
+     *
+     * <p>Everything it logs is redacted (audit finding F9). The URL it receives is a stored source,
+     * and a stored source can embed {@code user:password} or a token, so a log line carries the
+     * operation, the scheme and host of a remote target, the HTTP status code of a response and the
+     * local port of our own socket — never a full URL, a query string or a value read from a source.
+     */
     private String startTsfProxy(String originalUrl) {
         try {
             ServerSocket server = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));
@@ -198,14 +206,14 @@ public class StreamVaultHapPluginService extends Service {
                     String proxyUrl = originalUrl;
                     for (int redirectCount = 0; redirectCount < 5; redirectCount++) {
                         URL realUrl = new URL(proxyUrl);
-                        android.util.Log.d("HaP-TSF", "connecting to " + realUrl.getHost() + ":" + realUrl.getPort() + realUrl.getFile());
+                        android.util.Log.d("HaP-TSF", "connecting to " + LogRedaction.url(realUrl.toString()));
                         if (proxySocket != null) try { proxySocket.close(); } catch (Exception ignored) {}
                         proxySocket = new Socket(realUrl.getHost(), realUrl.getPort());
                         proxySocket.setTcpNoDelay(true);
                         proxySocket.setSoTimeout(120000);
                         OutputStream proxyOut = proxySocket.getOutputStream();
                         fromProxy = proxySocket.getInputStream();
-                        android.util.Log.d("HaP-TSF", "connected fd=" + proxySocket);
+                        android.util.Log.d("HaP-TSF", "connected local_port=" + proxySocket.getLocalPort());
 
                         String path = realUrl.getFile();
                         if (realUrl.getQuery() != null) path += "?" + realUrl.getQuery();
@@ -223,8 +231,7 @@ public class StreamVaultHapPluginService extends Service {
                             if (b1 == '\r' && b2 == '\n' && b3 == '\r' && b4 == '\n') break;
                         }
                         String headerStr = new String(headerBuf.toByteArray(), "UTF-8");
-                        String firstLine = headerStr.substring(0, Math.min(headerStr.length(), 200)).replace("\r\n", " | ");
-                        android.util.Log.d("HaP-TSF", "proxy response: " + firstLine);
+                        android.util.Log.d("HaP-TSF", "proxy response status=" + LogRedaction.httpStatus(headerStr));
 
                         if (headerStr.startsWith("HTTP/1.1 302") || headerStr.startsWith("HTTP/1.0 302")
                                 || headerStr.startsWith("HTTP/1.1 301") || headerStr.startsWith("HTTP/1.0 301")) {
@@ -234,7 +241,8 @@ public class StreamVaultHapPluginService extends Service {
                             if (location.startsWith("/")) {
                                 location = "http://" + realUrl.getHost() + ":" + realUrl.getPort() + location;
                             }
-                            android.util.Log.d("HaP-TSF", "redirect to " + location);
+                            // The destination is logged, redacted, by the next iteration.
+                            android.util.Log.d("HaP-TSF", "following redirect " + (redirectCount + 1));
                             proxyUrl = location;
                             continue;
                         }
@@ -306,7 +314,7 @@ public class StreamVaultHapPluginService extends Service {
                             }
                         } catch (IOException e) {
                             streamingRetries++;
-                            android.util.Log.w("HaP-TSF", "stream error (" + streamingRetries + "): " + e);
+                            android.util.Log.w("HaP-TSF", "stream error (" + streamingRetries + "): " + LogRedaction.error(e));
                             if (!gotData && streamingRetries >= 15) {
                                 android.util.Log.e("HaP-TSF", "no data after " + streamingRetries + " retries, giving up");
                                 break;
@@ -335,19 +343,19 @@ public class StreamVaultHapPluginService extends Service {
                                     if (bb1=='\r'&&bb2=='\n'&&bb3=='\r'&&bb4=='\n') break;
                                 }
                                 String hs = new String(hb.toByteArray(), "UTF-8");
-                                android.util.Log.d("HaP-TSF", "retry " + streamingRetries + " response: " + hs.substring(0, Math.min(hs.length(), 100)).replace("\r\n"," "));
+                                android.util.Log.d("HaP-TSF", "retry " + streamingRetries + " status=" + LogRedaction.httpStatus(hs));
                                 if (!hs.startsWith("HTTP/1.1 200") && !hs.startsWith("HTTP/1.0 200")) {
                                     android.util.Log.w("HaP-TSF", "retry got non-200, retrying...");
                                     continue;
                                 }
                             } catch (IOException e2) {
-                                android.util.Log.w("HaP-TSF", "retry connect failed: " + e2);
+                                android.util.Log.w("HaP-TSF", "retry connect failed: " + LogRedaction.error(e2));
                                 continue;
                             }
                         }
                     }
                 } catch (Exception e) {
-                    android.util.Log.e("HaP-TSF", "proxy thread error: " + e);
+                    android.util.Log.e("HaP-TSF", "proxy thread error: " + LogRedaction.error(e));
                 } finally {
                     try { if (proxySocket != null) proxySocket.close(); } catch (Exception ignored) {}
                     try { if (client != null) client.close(); } catch (Exception ignored) {}
@@ -355,10 +363,10 @@ public class StreamVaultHapPluginService extends Service {
                 }
             }, "tsf-proxy-" + port).start();
 
-            android.util.Log.d("HaP-TSF", "started tsf proxy on port " + port + " url=" + localUrl);
+            android.util.Log.d("HaP-TSF", "started tsf proxy on port " + port);
             return localUrl;
         } catch (Exception e) {
-            android.util.Log.e("HaP-TSF", "startTsfProxy failed: " + e);
+            android.util.Log.e("HaP-TSF", "startTsfProxy failed: " + LogRedaction.error(e));
             return null;
         }
     }

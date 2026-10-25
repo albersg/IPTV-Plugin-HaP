@@ -97,6 +97,9 @@
     <string name="button_stop">Detener</string>
     <string name="message_load_channels_hint">Carga una lista para ver sus canales.</string>
     <string name="section_log">Log</string>
+    <string name="section_privacy">Privacidad</string>
+    <string name="label_wipe_on_stop">Borrar caché y registro al detener</string>
+    <string name="message_wipe_on_stop_detail">Al detener el servidor, HaP también borra la caché de AceStream y el registro del motor. No se puede deshacer. Tus listas, canales y ajustes se conservan.</string>
     <string name="message_no_log">Sin eventos registrados.</string>
     <string name="message_copied">Copiado: %1$s</string>
     <string name="message_starting_hap">Arrancando HaP...</string>

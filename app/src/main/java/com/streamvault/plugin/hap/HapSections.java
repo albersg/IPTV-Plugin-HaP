@@ -43,6 +43,7 @@ final class HapSections {
         IPFS,
         IPFS_ADVANCED,
         LOGS,
+        PRIVACY,
         UPDATE,
         UPDATE_SETTINGS
     }
@@ -61,6 +62,7 @@ final class HapSections {
                     Panel.IPFS,
                     Panel.IPFS_ADVANCED,
                     Panel.LOGS,
+                    Panel.PRIVACY,
                     Panel.UPDATE,
                     Panel.UPDATE_SETTINGS
             ));

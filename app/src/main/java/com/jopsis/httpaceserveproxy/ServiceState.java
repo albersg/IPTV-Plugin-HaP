@@ -51,5 +51,14 @@ final class ServiceState {
     static synchronized String log() {
         return LOG.toString();
     }
+
+    /**
+     * Drops the in-memory engine log. Used by the opt-in wipe on an explicit stop (P3), after the
+     * engine is down, so the log panel starts empty instead of showing what was just deleted from
+     * disk.
+     */
+    static synchronized void clearLog() {
+        LOG.setLength(0);
+    }
 }
 

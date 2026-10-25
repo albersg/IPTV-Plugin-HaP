@@ -79,12 +79,13 @@ public final class HapSectionsTest {
     }
 
     @Test
-    public void ajustesHostsIpfsItsAdvancedOptionsLogsAndUpdatesInThatOrder() {
+    public void ajustesHostsIpfsItsAdvancedOptionsLogsPrivacyAndUpdatesInThatOrder() {
         assertEquals(
                 Arrays.asList(
                         HapSections.Panel.IPFS,
                         HapSections.Panel.IPFS_ADVANCED,
                         HapSections.Panel.LOGS,
+                        HapSections.Panel.PRIVACY,
                         HapSections.Panel.UPDATE,
                         HapSections.Panel.UPDATE_SETTINGS
                 ),

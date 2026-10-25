@@ -36,6 +36,7 @@ import android.widget.TextView;
 
 import com.jopsis.httpaceserveproxy.ChannelTestBatch;
 import com.jopsis.httpaceserveproxy.HapBridge;
+import com.jopsis.httpaceserveproxy.StopWipe;
 import com.jopsis.httpaceserveproxy.UpdateClient;
 import com.jopsis.httpaceserveproxy.UpdateDownloader;
 import com.jopsis.httpaceserveproxy.UpdateInstaller;
@@ -229,6 +230,8 @@ public class HapConfigActivity extends Activity {
     private LinearLayout updateConfirmContainer;
     private Switch updateAutomaticSwitch;
     private Switch updatePrereleaseSwitch;
+    /** P3: persisted opt-in wipe of the streaming cache and the engine log on an explicit stop. */
+    private Switch wipeOnStopSwitch;
     private EditText updateIntervalEdit;
     private EditText updateRepositoryEdit;
     private UpdateDecision currentUpdate;
@@ -267,6 +270,8 @@ public class HapConfigActivity extends Activity {
         // The update settings block is its own panel now, so its fields are filled here instead
         // of at the end of the update panel builder.
         populateUpdateSettingsFields();
+        // P3's switch shows what was stored; the read itself belongs off the main thread (S7).
+        loadWipeOnStopSetting();
         maybeRunAutomaticUpdateCheck();
     }
 
@@ -511,6 +516,8 @@ public class HapConfigActivity extends Activity {
                 return buildIpfsAdvancedSection();
             case LOGS:
                 return buildLogsPanel();
+            case PRIVACY:
+                return buildPrivacyPanel();
             case UPDATE:
                 return buildUpdatePanel();
             case UPDATE_SETTINGS:
@@ -1204,6 +1211,69 @@ public class HapConfigActivity extends Activity {
         return panel.container;
     }
 
+    // ------------------------------------------------------------------ privacy
+
+    /**
+     * P3: the opt-in wipe of the streaming cache and the engine log on an explicit stop.
+     *
+     * <p>Same shape as the IPFS panel — a label, one line saying what the switch does, and the
+     * switch — so the settings language stays the one the rest of Ajustes already speaks. The
+     * switch itself is a persisted preference, not an action, so it is not added to
+     * {@link #busyControls}: disabling a focused control mid-stop would drop the focus.
+     */
+    private View buildPrivacyPanel() {
+        PanelViews panel = panel(getString(R.string.section_privacy), false, true);
+
+        TextView hint = text(getString(R.string.message_wipe_on_stop_detail), 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+        hint.setPadding(0, 0, 0, dp(10));
+        panel.body.addView(hint, matchWrap());
+
+        LinearLayout switchRow = new LinearLayout(this);
+        switchRow.setOrientation(LinearLayout.HORIZONTAL);
+        switchRow.setGravity(Gravity.CENTER_VERTICAL);
+        panel.body.addView(switchRow, matchWrap());
+
+        switchRow.addView(
+                text(getString(R.string.label_wipe_on_stop), 14, COLOR_TEXT_PRIMARY, Typeface.BOLD),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        );
+
+        wipeOnStopSwitch = new Switch(this);
+        wipeOnStopSwitch.setPadding(dp(10), 0, 0, 0);
+        wipeOnStopSwitch.setContentDescription(getString(R.string.label_wipe_on_stop));
+        wipeOnStopSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
+            if (suppressSwitchCallbacks) return;
+            StopWipe.setEnabled(this, checked);
+        });
+        switchRow.addView(wipeOnStopSwitch, wrapWrap());
+
+        return panel.container;
+    }
+
+    /**
+     * Reads the persisted P3 setting off the main thread (S7) and shows it, without writing it
+     * back: the same shape {@link #resolveFirstRunOffer()} uses for a disk-backed decision.
+     */
+    private void loadWipeOnStopSetting() {
+        try {
+            workExecutor.execute(() -> {
+                boolean enabled = StopWipe.isEnabled(this);
+                main(() -> {
+                    if (destroyed || wipeOnStopSwitch == null) return;
+                    if (wipeOnStopSwitch.isChecked() == enabled) return;
+                    suppressSwitchCallbacks = true;
+                    try {
+                        wipeOnStopSwitch.setChecked(enabled);
+                    } finally {
+                        suppressSwitchCallbacks = false;
+                    }
+                });
+            });
+        } catch (RejectedExecutionException ignored) {
+            // The activity is tearing down: the switch keeps the state it was built with.
+        }
+    }
+
     // ------------------------------------------------------------------ updates
 
     /**
@@ -1449,11 +1519,23 @@ public class HapConfigActivity extends Activity {
         setUpdatesFeedback(getString(R.string.update_message_settings_saved), COLOR_SUCCESS);
     }
 
-    /** Lightweight automatic check: once per configured interval, never during a download. */
+    /**
+     * Lightweight automatic check: once per configured interval, never during a download, and only
+     * while the automatic check is enabled (P4). The interval and the switch live in
+     * SharedPreferences, so they are read on the work executor and only the decision comes back to
+     * the main thread (S7). With the switch off nothing reaches this method's caller at all, so a
+     * check then happens only through the explicit "check now" action.
+     */
     private void maybeRunAutomaticUpdateCheck() {
         if (destroyed || updateCheckInFlight || updateDownloadInProgress) return;
-        if (!UpdateSettings.isAutomaticCheckDue(this, System.currentTimeMillis())) return;
-        startUpdateCheck(false);
+        try {
+            workExecutor.execute(() -> {
+                boolean due = UpdateSettings.isAutomaticCheckDue(this, System.currentTimeMillis());
+                if (due) main(() -> startUpdateCheck(false));
+            });
+        } catch (RejectedExecutionException ignored) {
+            // The activity is tearing down; no automatic check is worth queueing.
+        }
     }
 
     private void startUpdateCheck(boolean manual) {
@@ -2678,6 +2760,10 @@ public class HapConfigActivity extends Activity {
         } else {
             runBusy(getString(R.string.message_stopping_hap), () -> {
                 HapBridge.stop(this);
+                // P3: this is the only path that wipes. StopWipe waits for the engine to be down,
+                // swallows and logs its own failures, and does nothing at all while the setting is
+                // off (the default), so an unchanged install behaves exactly as before.
+                StopWipe.wipeAfterExplicitStop(this);
                 return getString(R.string.message_hap_stopped);
             }, this::refreshConfigState);
         }
