@@ -14,6 +14,7 @@ add_library(httpaceproxy_core STATIC
     ${HTTPACE_CPP_DIR}/src/config.cpp
     ${HTTPACE_CPP_DIR}/src/http_server.cpp
     ${HTTPACE_CPP_DIR}/src/json.cpp
+    ${HTTPACE_CPP_DIR}/src/local_source.cpp
     ${HTTPACE_CPP_DIR}/src/playlist.cpp
     ${HTTPACE_CPP_DIR}/src/plugins.cpp
     ${HTTPACE_CPP_DIR}/src/proxy.cpp

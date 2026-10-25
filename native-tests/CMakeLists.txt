@@ -49,9 +49,19 @@ target_include_directories(httpace_chunk_parser_tests PRIVATE ${HTTPACE_CPP_DIR}
 
 target_link_libraries(httpace_chunk_parser_tests PRIVATE GTest::gtest_main)
 
+add_executable(httpace_local_source_tests
+    test_local_source.cpp
+    ${HTTPACE_CPP_DIR}/src/local_source.cpp
+)
+
+target_include_directories(httpace_local_source_tests PRIVATE ${HTTPACE_CPP_DIR}/include)
+
+target_link_libraries(httpace_local_source_tests PRIVATE GTest::gtest_main)
+
 include(GoogleTest)
 # PRE_TEST defers enumeration to `ctest` time instead of running the freshly
 # linked binary during the build, which fails on toolchains where the build
 # tree binary cannot be executed at that point.
 gtest_discover_tests(httpace_util_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_chunk_parser_tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(httpace_local_source_tests DISCOVERY_MODE PRE_TEST)

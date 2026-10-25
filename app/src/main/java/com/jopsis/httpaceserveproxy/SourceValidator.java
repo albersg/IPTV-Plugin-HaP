@@ -2,6 +2,7 @@ package com.jopsis.httpaceserveproxy;
 
 import android.content.Context;
 
+import com.streamvault.plugin.hap.LocalSourceFile;
 import com.streamvault.plugin.hap.R;
 
 import org.json.JSONArray;
@@ -9,6 +10,8 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -43,6 +46,12 @@ final class SourceValidator {
             return ValidationResult.error(normalized, context.getString(R.string.error_source_url_empty));
         }
         if (!isHttpUrl(normalized)) {
+            // A list imported from the device is not downloaded at all: it is read here, with the
+            // same rules the remote path uses, so both kinds of source accept and reject the same
+            // files.
+            if (LocalSourceFile.isLocalValue(normalized)) {
+                return validateLocalSource(context, normalized, label);
+            }
             return ValidationResult.error(normalized, context.getString(R.string.error_source_url_http));
         }
         if (isBrowserOnlyIpfsGateway(normalized)) {
@@ -62,6 +71,28 @@ final class SourceValidator {
             String message = e.getMessage();
             return ValidationResult.error(
                     normalized,
+                    message == null || message.isEmpty() ? e.toString() : message
+            );
+        }
+    }
+
+    private static ValidationResult validateLocalSource(Context context, String value, String label) {
+        File file = new File(LocalSourceFile.pathOf(value));
+        if (!file.isFile()) {
+            return ValidationResult.error(value, context.getString(
+                    R.string.error_source_local_missing, LocalSourceFile.displayName(value)));
+        }
+        if (file.length() > LocalSourceFile.MAX_BYTES) {
+            return ValidationResult.error(value, context.getString(
+                    R.string.error_source_local_too_large, LocalSourceFile.MAX_BYTES / (1024 * 1024)));
+        }
+        try (FileInputStream input = new FileInputStream(file)) {
+            validateM3u(context, readAll(context, input), label);
+            return ValidationResult.ok(value);
+        } catch (Exception e) {
+            String message = e.getMessage();
+            return ValidationResult.error(
+                    value,
                     message == null || message.isEmpty() ? e.toString() : message
             );
         }

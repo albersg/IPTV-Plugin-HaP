@@ -1,3 +1,4 @@
+#include "httpaceproxycpp/local_source.hpp"
 #include "httpaceproxycpp/plugins.hpp"
 #include "httpaceproxycpp/proxy.hpp"
 #include "httpaceproxycpp/util.hpp"
@@ -384,13 +385,23 @@ protected:
 
         for (const auto& source : sources) {
             try {
-                auto response = http_client_.get(source.url, {{"User-Agent", kBrowserUserAgent}}, 60, true);
-                bool ace_api_source = is_acestream_api_url(source.url);
+                // A source imported from the device is a file, not a URL: there is nothing to
+                // download and it can never be an AceStream API endpoint. Everything after this
+                // point - parse, merge, EPG, picons - is the same for both kinds, which is what
+                // makes a local list behave exactly like a remote one.
+                std::string body;
+                bool ace_api_source = false;
+                if (is_local_source(source.url)) {
+                    body = read_local_source(local_source_path(source.url));
+                } else {
+                    body = http_client_.get(source.url, {{"User-Agent", kBrowserUserAgent}}, 60, true).body;
+                    ace_api_source = is_acestream_api_url(source.url);
+                }
                 auto items = ace_api_source
-                             ? parse_acestream_api_items(response.body, channels, picons, source.name)
-                             : parse_m3u_acestream_items(response.body, channels, picons);
+                             ? parse_acestream_api_items(body, channels, picons, source.name)
+                             : parse_m3u_acestream_items(body, channels, picons);
                 if (!ace_api_source) {
-                    for (const auto& epg_url : extract_epg_urls_from_m3u(response.body)) {
+                    for (const auto& epg_url : extract_epg_urls_from_m3u(body)) {
                         add_unique_url(epg_urls, epg_url);
                     }
                 }

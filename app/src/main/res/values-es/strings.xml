@@ -167,6 +167,8 @@
     <string name="error_custom_managed_in_custom">La lista custom se gestiona desde Custom.</string>
     <string name="error_source_name_empty">El nombre de la fuente está vacío.</string>
     <string name="error_source_url_empty">La URL de la fuente está vacía.</string>
+    <string name="error_source_local_missing">El archivo de %1$s ya no está en este dispositivo.</string>
+    <string name="error_source_local_too_large">El archivo supera los %1$d MB.</string>
     <string name="error_source_url_http">La URL de la fuente debe usar http o https.</string>
     <string name="error_source_not_found">La fuente ya no existe.</string>
     <string name="error_source_url_duplicate">Ya existe una fuente con esa URL.</string>
