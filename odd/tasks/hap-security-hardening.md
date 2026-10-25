@@ -32,7 +32,7 @@ out of scope for a code-only slice; it needs device validation first.
 | F5 | `check_peers` opens real P2P sessions outside the concurrency counters | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | T4 |
 | F6 | Unbounded `strtoull` chunk size; `chunk_size + 2` wraps | MEDIUM | `app/src/main/cpp/android_http_client.cpp` | **done**, no regression test yet |
 | F7 | `Access-Control-Allow-Origin: *` on unauthenticated playlist endpoints that carry credentials | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | **done**, wildcard removed |
-| F8 | `--bind-all` may expose the engine's own ports regardless of LAN mode | MEDIUM (hypothesis) | `AceServeRuntime.java` | T7 |
+| F8 | `--bind-all` may expose the engine's own ports regardless of LAN mode | **REFUTED by measurement** | `AceServeRuntime.java` | T7 (closed) |
 | F9 | Request targets, stream URLs and provider URLs logged at INFO | LOW/MEDIUM | `proxy.cpp`, `broadcast.cpp`, `StreamVaultHapPluginService.java` | T8 |
 | F10 | Failed-source refresh amplification without a single-flight lock | LOW | `httpaceproxycpp/src/plugins.cpp` | T9 |
 | F11 | EOL jQuery 3.3.1 / Bootstrap 4.1.1 served from `/stat`; no third-party notice file | LOW | `assets/httpaceproxy/http/` | T10 |
@@ -48,7 +48,7 @@ out of scope for a code-only slice; it needs device validation first.
 | T5 | S1 | Bound the chunk size; reject sizes beyond a sane maximum before the `+2` | ctest |
 | T6 | S1 | Restrict CORS on playlist endpoints carrying credentials | **done**, syntax-checked only |
 | T6b | S2 | Do not add proxy authentication (breaks Cast and header-less players) without a device test | decision recorded |
-| T7 | S2 | Resolve `--bind-all` by inspecting the engine's listening sockets on hardware; do not change blind | needs device |
+| T7 | S2 | Resolve `--bind-all` by inspecting the engine's listening sockets on hardware; do not change blind | **done**: the flag is not the cause |
 | T8 | S2 | Stop logging request targets and provider URLs at INFO | review |
 | T9 | S2 | Add single-flight to playlist refresh | ctest |
 | T10 | S1 | Update or document the bundled jQuery/Bootstrap versions; add a third-party notices file | review |
@@ -97,3 +97,35 @@ That yields the host package(s). With them, `Binder.getCallingUid()` plus
 `getPackageManager().getNameForUid` gives a caller identity, and the service can allow the host and
 its own UID while redacting source URLs and refusing LAN enablement for everyone else. Until then
 F1 remains open, and it is the highest-severity item on this branch.
+
+**L6 — F8 is refuted, measured on the Xiaomi box.** With the server running and LAN mode off, the
+app's sockets were read directly:
+
+```
+127.0.0.1:8888    the HaP proxy: loopback only, exactly as LAN mode off promises
+0.0.0.0:6878      AceStream stream/HTTP
+0.0.0.0:62062     AceStream control API
+0.0.0.0:8621      AceStream
+0.0.0.0:45xxx     the peer listener
+```
+
+The hypothesis behind privacy item P1 was that `--bind-all` in `AceServeRuntime` caused this, so
+removing it would close the exposure. The flag was removed, the APK rebuilt, reinstalled and the
+server started again: **the same four ports still listened on 0.0.0.0**. The flag is therefore not
+the cause, and it was restored rather than left out on a theory the measurement contradicts.
+
+What this means, stated plainly:
+
+- The engine binds every interface by default, and it must accept inbound peers to work at all, so
+  at least the peer port is public by design. The stream port and the control API are public too,
+  and HaP has no lever over that: the runtime is a prebuilt binary and the app runs unprivileged.
+- The proxy's LAN firewall therefore protects less than it appears to. A peer that can reach the
+  network can talk to the engine directly, without passing the proxy's allow list. `--bind-all` was
+  a red herring; the real gate would have to be the engine's own configuration or a firewall
+  outside the app.
+- Closing this needs either documented AceServe options for a per-port bind address, or a VPN
+  interface that keeps the peer port reachable only through the tunnel. Neither is a HaP code change,
+  and neither should be claimed as done.
+
+Nothing about the P2P design changed, so the earlier statement stands: an app inside HaP cannot hide
+the user's address from the swarm.
