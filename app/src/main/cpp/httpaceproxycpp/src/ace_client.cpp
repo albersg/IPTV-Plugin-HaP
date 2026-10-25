@@ -227,6 +227,17 @@ void AceClient::reader_loop() {
 }
 
 void AceClient::write_line(const std::string& line) {
+    // Security: this is the only path a command takes to the engine, and the engine
+    // reads the stream line by line. A value carrying CR or LF - a channel name or a
+    // content id that came out of a decoded URL - would be read as a second command,
+    // so refuse it here instead of trusting every caller to have sanitised its input.
+    // Tabs and spaces are legitimate inside channel names; other control bytes are not.
+    for (char c : line) {
+        unsigned char byte = static_cast<unsigned char>(c);
+        if (byte == '\r' || byte == '\n' || (byte < 0x20 && byte != '\t')) {
+            throw AceError("refusing engine command containing control characters");
+        }
+    }
     std::string data = line + "\r\n";
     log_line("DEBUG", "[" + title_ + "] >>> " + line);
     if (!send_all_fd(fd_, data)) throw AceError("error writing data to AceEngine API port");

@@ -27,10 +27,10 @@ out of scope for a code-only slice; it needs device validation first.
 | --- | --- | --- | --- | --- |
 | F1 | Exported plugin service authorises nobody; any app can start/stop the runtime, enable LAN exposure, and read back stored provider URLs including credentials | CRITICAL | `StreamVaultHapPluginService.java`, manifest | T1 |
 | F2 | LAN mode has no authentication and its only gate trusts the spoofable `X-Forwarded-For` | HIGH | `httpaceproxycpp/src/proxy.cpp` | T2 |
-| F3 | AceStream control-protocol injection: no CR/LF filtering before `write_line` | HIGH | `httpaceproxycpp/src/ace_client.cpp` | T3 |
+| F3 | AceStream control-protocol injection: no CR/LF filtering before `write_line` | HIGH | `httpaceproxycpp/src/ace_client.cpp` | **done**, `write_line` refuses control bytes |
 | F4 | Stored XSS in `/stat` dashboard | MEDIUM | `assets/httpaceproxy/http/js/index.js` | **done**, `8a80134` |
 | F5 | `check_peers` opens real P2P sessions outside the concurrency counters | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | T4 |
-| F6 | Unbounded `strtoull` chunk size; `chunk_size + 2` wraps | MEDIUM | `app/src/main/cpp/android_http_client.cpp` | T5 |
+| F6 | Unbounded `strtoull` chunk size; `chunk_size + 2` wraps | MEDIUM | `app/src/main/cpp/android_http_client.cpp` | **done**, no regression test yet |
 | F7 | `Access-Control-Allow-Origin: *` on unauthenticated playlist endpoints that carry credentials | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | T6 |
 | F8 | `--bind-all` may expose the engine's own ports regardless of LAN mode | MEDIUM (hypothesis) | `AceServeRuntime.java` | T7 |
 | F9 | Request targets, stream URLs and provider URLs logged at INFO | LOW/MEDIUM | `proxy.cpp`, `broadcast.cpp`, `StreamVaultHapPluginService.java` | T8 |
@@ -63,6 +63,8 @@ hide their address from the swarm.
 **L2 — evidence.** Findings F1-F11 come from the branch audit with `path:line` citations. F4 is
 fixed in `8a80134`. F8 remains the open question behind privacy item P1: the bundled engine zip
 exposes only three `.py` entries, so the flag's semantics could not be read offline.
+
+**L4 — F3 and F6 fixed without a regression test.** Both are refused at the choke point and both compile under the NDK clang, but neither is pinned by a test: the native suite compiles only `util.cpp`, and `parse_chunk_size` lives in a translation unit that needs `jni.h`. Pinning F6 needs that function extracted into a unit the native suite can build. Recorded as debt, not as verified.
 
 **L3 — constraint.** No device is connected during this work, so anything touching sockets,
 binding or player compatibility is recorded as pending verification, not as done.
