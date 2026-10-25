@@ -203,6 +203,7 @@ public class HapConfigActivity extends Activity {
     private TextView eventFeedbackView;
     private InPlaceList<EventCatalog.Event> eventListRef;
     private InPlaceList<ChannelChoice> eventChannelList;
+    private Button eventRefreshButton;
     private TextView eventChannelsHeading;
     private List<EventCatalog.Event> currentEvents = new ArrayList<>();
     private final Map<EventSport.Kind, Button> eventFilterButtons =
@@ -741,6 +742,13 @@ public class HapConfigActivity extends Activity {
             View view = sectionViews.valueAt(i);
             int visibility = sectionViews.keyAt(i) == section.ordinal() ? View.VISIBLE : View.GONE;
             if (view.getVisibility() != visibility) view.setVisibility(visibility);
+        }
+
+        // Opening the events section loads what is on, if it is not on screen already. It has to happen
+        // here rather than when the panel was built, because every section is built at startup.
+        if (section == HapSections.Section.EVENTOS && eventRefreshButton != null
+                && currentEvents.isEmpty() && eventRefreshButton.isEnabled()) {
+            eventRefreshButton.performClick();
         }
 
         // Selected is not the same as focused: the rail shows both at once.
@@ -1314,6 +1322,17 @@ public class HapConfigActivity extends Activity {
      * <p>Off the main thread: reading the guide from disk and parsing it is not instant, and on the device
      * a cold download took 96.8 seconds. Nothing here touches the network on the main thread.
      */
+    /** A compact chip for the filter row: a button would claim a whole line of its own. */
+    private Button chip(String label) {
+        Button chip = button(label);
+        chip.setTextSize(12);
+        chip.setMinWidth(0);
+        chip.setMinimumWidth(0);
+        chip.setMinimumHeight(0);
+        chip.setPadding(dp(14), dp(6), dp(14), dp(6));
+        return chip;
+    }
+
     /** Keeps only the chosen sport and repaints; null shows everything. */
     private void applyEventFilter(EventSport.Kind kind) {
         eventFilter = kind;
@@ -1359,22 +1378,21 @@ public class HapConfigActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         panel.body.addView(filterScroll, matchWrap());
 
-        eventFilterAll = button(getString(R.string.events_filter_all));
+        eventFilterAll = chip(getString(R.string.events_filter_all));
         eventFilterAll.setOnClickListener(v -> applyEventFilter(null));
         filters.addView(eventFilterAll, wrapWrap());
-        boolean first = true;
         for (EventSport.Kind kind : EventSport.Kind.values()) {
-            Button chip = button(kind.label());
-            chip.setOnClickListener(v -> applyEventFilter(kind));
-            chip.setVisibility(View.GONE);
-            filters.addView(chip, wrapWrapLeft(8));
-            eventFilterButtons.put(kind, chip);
-            first = false;
+            Button kindChip = chip(kind.label());
+            kindChip.setOnClickListener(v -> applyEventFilter(kind));
+            kindChip.setVisibility(View.GONE);
+            filters.addView(kindChip, wrapWrapLeft(dp(6)));
+            eventFilterButtons.put(kind, kindChip);
         }
 
-        Button eventsButton = button(getString(R.string.button_events));
+        Button eventsButton = chip(getString(R.string.button_events));
         eventsButton.setOnClickListener(v -> loadEvents(eventList, eventsButton));
-        panel.body.addView(eventsButton, wrapWrap());
+        filters.addView(eventsButton, wrapWrapLeft(dp(14)));
+        eventRefreshButton = eventsButton;
 
         // The channels of the event the reader picked. Empty until one is picked.
         eventChannelsHeading = text("", 15, COLOR_TEXT_PRIMARY, Typeface.BOLD);
@@ -1388,13 +1406,13 @@ public class HapConfigActivity extends Activity {
         eventChannelList = new InPlaceList<>(eventChannelsBody, ChannelChoiceRow::new);
 
         eventFeedbackView = text("", 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
-        eventFeedbackView.setPadding(0, dp(10), 0, 0);
+        eventFeedbackView.setPadding(0, dp(8), 0, 0);
         panel.body.addView(eventFeedbackView, matchWrap());
         panel.body.addView(eventsBody, matchWrap());
 
-        // Opens on arrival: an events section that greets you with a button and nothing else would make
-        // the reader press twice to see anything.
-        panel.body.post(() -> eventsButton.performClick());
+        // Nothing is loaded here: every section is built at startup, when the channel list is still empty,
+        // so loading now would answer "carga tus canales primero" and never try again. showSection starts
+        // the load when the section is actually opened.
         return panel.container;
     }
 
