@@ -1471,7 +1471,13 @@ public class HapConfigActivity extends Activity {
             view.setOnClickListener(v -> {
                 if (choice == null) return;
                 markChosenChannel(this);
-                launchChannel(choice.contentId, choice.name);
+                if (launchChannel(choice.contentId, choice.name)) {
+                    setEventFeedback(getString(R.string.message_watching_channel, choice.name));
+                } else {
+                    // The channels section has its own feedback line; without this an Events failure would
+                    // be silent, which is what happened when no player was installed.
+                    setEventFeedback(getString(R.string.error_no_video_player));
+                }
             });
         }
 
@@ -3527,7 +3533,11 @@ public class HapConfigActivity extends Activity {
      * AceStream's own app for it.
      */
     private void watchChannel(HapRows.Channel channel) {
-        launchChannel(channel.contentId, channel.name);
+        if (launchChannel(channel.contentId, channel.name)) {
+            renderChannelFeedback(getString(R.string.message_watching_channel, channel.name));
+        } else {
+            renderChannelFeedback(getString(R.string.error_no_video_player));
+        }
     }
 
     /**
@@ -3536,8 +3546,8 @@ public class HapConfigActivity extends Activity {
      * <p>Split out of {@link #watchChannel} so an event row can launch the same way the channel list does,
      * without building a channel row it does not have.
      */
-    private void launchChannel(String contentId, String name) {
-        if (contentId == null || contentId.trim().isEmpty()) return;
+    private boolean launchChannel(String contentId, String name) {
+        if (contentId == null || contentId.trim().isEmpty()) return false;
         // AceStream Pro is a player, but for acestream:// links: handed an http URL it treats it as its
         // own API query and answers "analyze failed". So the channel goes out on the protocol that app
         // speaks, the same way every other IPTV app launches it. That makes AceStream do the P2P itself,
@@ -3547,9 +3557,9 @@ public class HapConfigActivity extends Activity {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(intent);
-            renderChannelFeedback(getString(R.string.message_watching_channel, name));
-        } catch (ActivityNotFoundException e) {
-            renderChannelFeedback(getString(R.string.error_no_video_player));
+            return true;
+        } catch (ActivityNotFoundException noPlayer) {
+            return false;
         }
     }
 
