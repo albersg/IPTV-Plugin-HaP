@@ -26,6 +26,13 @@
     <dimen name="hap_focus_stroke">2dp</dimen>
     <dimen name="hap_hairline">1dp</dimen>
 
+    <!--
+        The channel list scrolls inside this height instead of growing with the page. A bounded
+        height is what lets the recycler keep only a viewport of rows measured and attached; the
+        page keeps scrolling for everything above and below it.
+    -->
+    <dimen name="hap_channel_list_height">240dp</dimen>
+
     <dimen name="hap_status_dot">10dp</dimen>
     <dimen name="hap_chevron">20dp</dimen>
 </resources>

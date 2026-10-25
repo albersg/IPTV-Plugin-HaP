@@ -34,6 +34,9 @@ import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.jopsis.httpaceserveproxy.ChannelTestBatch;
 import com.jopsis.httpaceserveproxy.HapBridge;
 import com.jopsis.httpaceserveproxy.StopWipe;
@@ -50,6 +53,7 @@ import com.jopsis.httpaceserveproxy.update.UpdateDecision;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -160,7 +164,6 @@ public class HapConfigActivity extends Activity {
     private LinearLayout clientsContainer;
     private TextView clientsStatusView;
     private LinearLayout pluginTabsContainer;
-    private LinearLayout channelRowsContainer;
     private TextView channelsHintView;
     private TextView channelFeedbackView;
     /**
@@ -172,7 +175,13 @@ public class HapConfigActivity extends Activity {
     private InPlaceList<HapRows.CustomChannel> customChannelList;
     private InPlaceList<HapRows.Client> clientList;
     private InPlaceList<HapRows.PluginTab> pluginTabList;
-    private InPlaceList<HapRows.Channel> channelList;
+    /**
+     * The channel list is the one list that is a recycler (D3): it is the only one long enough that
+     * holding a view hierarchy per row costs real memory. It is created once, with the adapter, and
+     * only ever receives a new model through {@code submitList}.
+     */
+    private RecyclerView channelRecycler;
+    private ChannelAdapter channelAdapter;
     private Button stopChannelTestButton;
     private TextView logView;
     private Switch enabledSwitch;
@@ -1165,17 +1174,6 @@ public class HapConfigActivity extends Activity {
         pluginTabList = new InPlaceList<>(pluginTabsContainer, () ->
                 new PluginTabRow(pluginTabsContainer.getChildCount() == 0 ? 0 : 8));
 
-        ScrollView channelsScroll = new ScrollView(this);
-        channelsScroll.setFillViewport(false);
-        channelsScroll.setFocusable(false);
-        channelsScroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
-        channelRowsContainer = new LinearLayout(this);
-        channelRowsContainer.setOrientation(LinearLayout.VERTICAL);
-        channelRowsContainer.setFocusable(false);
-        channelsScroll.addView(channelRowsContainer, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
         LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -1189,9 +1187,29 @@ public class HapConfigActivity extends Activity {
         channelsHintView = text(getString(R.string.message_load_channels_hint), 13, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
         channelsHintView.setVisibility(View.GONE);
         panel.body.addView(channelsHintView, hintParams);
-        panel.body.addView(channelsScroll, listParams);
-        channelList = new InPlaceList<>(channelRowsContainer, () ->
-                new ChannelRow(channelRowsContainer.getChildCount() == 0 ? 0 : 8));
+
+        // The channel list is a recycler (D3). It owns a fixed height instead of growing with the
+        // page: that bounded viewport is what keeps only the visible rows measured and attached,
+        // and it is why the D-pad hand-off in FocusNavigator exists.
+        listParams.height = getResources().getDimensionPixelSize(R.dimen.hap_channel_list_height);
+        channelRecycler = new RecyclerView(this);
+        channelRecycler.setLayoutManager(new LinearLayoutManager(this));
+        // A peer result must repaint its row, not fade it out from under the user's focus.
+        channelRecycler.setItemAnimator(null);
+        // The list's own size never depends on its rows, so a change never re-measures it.
+        channelRecycler.setHasFixedSize(true);
+        channelRecycler.setFocusable(false);
+        channelRecycler.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        channelRecycler.setVisibility(View.GONE);
+        panel.body.addView(channelRecycler, listParams);
+        channelAdapter = new ChannelAdapter(
+                () -> new ChannelRow(new RecyclerView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )),
+                dp(8)
+        );
+        channelRecycler.setAdapter(channelAdapter);
         renderChannels();
 
         return panel.container;
@@ -2556,14 +2574,17 @@ public class HapConfigActivity extends Activity {
     }
 
     /**
-     * Applies the channel test rows in place. A peer result that arrives updates its own row, so the
-     * row the user is standing on keeps the focus while a list test is running.
+     * Hands the channel test rows to the list. The differ compares the value models off the main
+     * thread and rebinds only the row whose model changed, so the row the user is standing on keeps
+     * the focus while a list test is running, and a tick that changes nothing touches no view at all
+     * (S7).
      */
     private void renderChannels() {
         HapBridge.PluginChannelsInfo selectedPlugin = selectedPlugin();
         applyVisibility(channelsHintView, selectedPlugin == null);
         if (selectedPlugin == null) {
-            channelList.clear();
+            channelAdapter.submitList(Collections.<HapRows.Channel>emptyList());
+            applyVisibility(channelRecycler, false);
             return;
         }
 
@@ -2582,14 +2603,17 @@ public class HapConfigActivity extends Activity {
                     result == null ? 0 : (result.available ? COLOR_SUCCESS : COLOR_TEXT_TERTIARY)
             ));
         }
-        channelList.apply(rows);
+        // A fresh list every time: the differ keeps the one it was given, so nothing may mutate it.
+        channelAdapter.submitList(rows);
+        // An empty list would add nothing but a blank slab of its fixed height, so it is hidden.
+        applyVisibility(channelRecycler, !rows.isEmpty());
     }
 
     /**
      * One channel test row. The detail line and the result pill are created with the row and only
      * shown or hidden afterwards, so a result never changes the shape of the row it belongs to.
      */
-    private final class ChannelRow implements InPlaceList.Row<HapRows.Channel> {
+    private final class ChannelRow implements ChannelAdapter.Row {
 
         private final LinearLayout row;
         private final TextView nameView;
@@ -2602,12 +2626,14 @@ public class HapConfigActivity extends Activity {
         private int appliedBadgeBackground = Integer.MIN_VALUE;
         private int appliedBadgeForeground = Integer.MIN_VALUE;
 
-        ChannelRow(int topMargin) {
+        ChannelRow(RecyclerView.LayoutParams params) {
             row = new LinearLayout(HapConfigActivity.this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(10), dp(8), dp(10), dp(8));
-            row.setLayoutParams(matchWrapTop(topMargin));
+            // The gap between rows is the list's business now: a recycled row learns it from its
+            // position instead of from the container's child count.
+            row.setLayoutParams(params);
             row.setClickable(true);
             row.setFocusable(true);
             row.setOnClickListener(v -> {

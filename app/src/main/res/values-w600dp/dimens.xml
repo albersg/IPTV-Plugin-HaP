@@ -22,6 +22,9 @@
     <dimen name="hap_focus_stroke">2dp</dimen>
     <dimen name="hap_hairline">1dp</dimen>
 
+    <!-- Five rows of a 10-foot layout stay visible while the rest scrolls inside the list. -->
+    <dimen name="hap_channel_list_height">300dp</dimen>
+
     <dimen name="hap_status_dot">12dp</dimen>
     <dimen name="hap_chevron">24dp</dimen>
 </resources>

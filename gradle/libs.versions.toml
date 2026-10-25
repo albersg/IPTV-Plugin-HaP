@@ -15,6 +15,12 @@ agp = "8.10.1"
 [libraries]
 core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.18.0" }
 
+# The channel list is the one list long enough to keep a viewport instead of every row in memory,
+# so it is a RecyclerView with a ListAdapter and DiffUtil (D3). Declared here and referenced from
+# the build, which is the rule this catalog opens with. 1.4.0 is Java-only: it pulls no Kotlin
+# runtime into an application that has none.
+recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version = "1.4.0" }
+
 # The updater's decision core is plain Java, so it is tested on the JVM.
 junit = { group = "junit", name = "junit", version = "4.13.2" }
 

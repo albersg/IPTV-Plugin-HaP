@@ -125,17 +125,23 @@ public final class InPlaceUpdateTest {
     @Test
     public void everyRowListIsDrivenByTheInPlaceUpdater() {
         String activity = source("HapConfigActivity.java");
+        // The channel list is the exception and left this set on purpose (D3): it is a recycler with
+        // a ListAdapter, pinned by ChannelRecyclerTest. The five short lists stay in place, where
+        // rebinding them costs less than a viewport would.
         String[] lists = {
                 "InPlaceList<HapRows.Endpoint>",
                 "InPlaceList<HapRows.Source>",
                 "InPlaceList<HapRows.CustomChannel>",
                 "InPlaceList<HapRows.Client>",
-                "InPlaceList<HapRows.PluginTab>",
-                "InPlaceList<HapRows.Channel>"
+                "InPlaceList<HapRows.PluginTab>"
         };
         for (String list : lists) {
             assertTrue(list + " must own its container", activity.contains(list));
         }
+        assertFalse(
+                "the channel list is a recycler now, not an in-place list",
+                activity.contains("InPlaceList<HapRows.Channel>")
+        );
     }
 
     /** The one decision that protects every row identity is taken before any child is touched. */

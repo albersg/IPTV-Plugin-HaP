@@ -10,6 +10,8 @@ import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 
+import androidx.recyclerview.widget.RecyclerView;
+
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -42,6 +44,10 @@ import java.util.Set;
  *   <li>Only focusable <b>leaves</b> are cells, so a scroll wrapper or a row layout can never take
  *       the focus away from the control inside it.</li>
  *   <li>Nothing GONE, disabled or detached is ever a cell.</li>
+ *   <li>A vertical press is consumed even when nothing in that direction can take it, so it never
+ *       falls through to the platform's geometric search. The one exception is a row of a
+ *       {@link RecyclerView} that still has a row beyond it: that press has to reach the list so
+ *       the list scrolls, and {@link ScrollHandoff} bounds the exception to exactly that case.</li>
  * </ul>
  *
  * <p>Three things are repaired rather than guessed:
@@ -218,14 +224,21 @@ final class FocusNavigator {
             // a URL stays editable and only its ends hand the press back to the shell.
             if (focused instanceof EditText && caretHasRoom((EditText) focused, keyCode)) return false;
             Graph graph = Graph.of(content, FocusGrid.Edges.CLAMPED, false);
-            if (moveWithin(graph, focused, keyCode)) return true;
+            int current = graph.indexOf(focused);
+            FocusGrid.Move move = graph.grid.move(current, directionOf(keyCode));
+            if (move.handled()) {
+                if (move.index() != current && move.index() != FocusGrid.NO_INDEX) {
+                    return focusCell(graph, move.index());
+                }
+                // The section has no control left in that direction, so the press is consumed
+                // instead of being handed to the platform's geometric search - with one narrow
+                // exception, which the next line states and bounds.
+                if (isVertical(keyCode) && handsOffToRecycler(focused, keyCode)) return false;
+                return true;
+            }
             // LEFT from the first control of a row has nothing to its left inside the section, so
             // it returns to the rail entry of the section that is on screen.
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return focusRailItem(section);
-            // UP and DOWN are never delegated. On the device, an unplaced vertical press fell
-            // through to the platform's geometric search, which put focus on the rail and left the
-            // control the user was aiming at untouched. Consuming it keeps the D-pad inside the
-            // section; the dead-focus repair below still recovers if the target was unreachable.
             return isVertical(keyCode);
         }
 
@@ -234,6 +247,33 @@ final class FocusNavigator {
         Anchor anchor = lastAnchor != null ? lastAnchor : pausedAnchor;
         if (anchor == null) return false;
         return focusAnchor(graphOf(anchor), anchor);
+    }
+
+    /**
+     * True when a vertical press must be given back to the list that holds the focused row.
+     *
+     * <p>This is the single exception to "UP and DOWN are never delegated". A {@link RecyclerView}
+     * keeps only the rows of its viewport in the view tree, so at the last visible row the graph has
+     * nothing to move to and consuming the press there would dead-end traversal: the rows below
+     * could never be reached with the remote. Handing the press back is what lets the list scroll
+     * and the journey continue.
+     *
+     * <p>It cannot re-open delegation for the rest of the tree. It requires the focused view to be a
+     * direct child of a recycler <b>and</b> {@link ScrollHandoff} to confirm that the list holds a
+     * row beyond it, so every other control, and the recycler's own ends, still clamp and consume as
+     * they did before.
+     */
+    private static boolean handsOffToRecycler(View focused, int keyCode) {
+        ViewParent parent = focused == null ? null : focused.getParent();
+        if (!(parent instanceof RecyclerView)) return false;
+        RecyclerView list = (RecyclerView) parent;
+        RecyclerView.Adapter<?> adapter = list.getAdapter();
+        if (adapter == null) return false;
+        return ScrollHandoff.shouldHandOff(
+                directionOf(keyCode),
+                list.getChildAdapterPosition(focused),
+                adapter.getItemCount()
+        );
     }
 
     /** One press inside one graph; true when the graph placed it. */

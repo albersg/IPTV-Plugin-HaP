@@ -121,6 +121,10 @@ android {
 
 dependencies {
     implementation(libs.core.ktx)
+    // The channel list is the one list long enough to need a viewport instead of holding every row
+    // in memory: it is a RecyclerView with a ListAdapter and DiffUtil (D3). Every other list stays
+    // on InPlaceList, which is the cheaper tool for a list that never outgrows the screen.
+    implementation(libs.recyclerview)
 
     // The updater's decision core (com.jopsis.httpaceserveproxy.update) is plain
     // Java with no android.* imports, so it is tested on the JVM instead of on a
