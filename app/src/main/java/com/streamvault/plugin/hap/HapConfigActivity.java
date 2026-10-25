@@ -221,6 +221,7 @@ public class HapConfigActivity extends Activity {
             new java.util.EnumMap<>(EventSport.Kind.class);
     private Button eventFilterAll;
     private EventSport.Kind eventFilter;
+    private int lastMatchedCount;
     private InPlaceList<HapRows.Client> clientList;
     private InPlaceList<HapRows.PluginTab> pluginTabList;
     /**
@@ -1357,8 +1358,12 @@ public class HapConfigActivity extends Activity {
     /** Keeps only the chosen sport and repaints; null shows everything. */
     private void applyEventFilter(EventSport.Kind kind) {
         eventFilter = kind;
-        if (eventListRef != null) {
-            eventListRef.apply(EventCatalog.matching(currentEvents, "", kind));
+        List<EventCatalog.Event> shown = EventCatalog.matching(currentEvents, "", kind);
+        if (eventListRef != null) eventListRef.apply(shown);
+        // The summary line counts what is on screen, not what the last load found: after choosing Futbol it
+        // would otherwise still claim nineteen events.
+        if (!currentEvents.isEmpty()) {
+            setEventFeedback(getString(R.string.events_summary, shown.size(), lastMatchedCount));
         }
     }
 
@@ -1669,6 +1674,7 @@ public class HapConfigActivity extends Activity {
                     list.apply(java.util.Collections.<EventCatalog.Event>emptyList());
                     return;
                 }
+                lastMatchedCount = matchedCount;
                 setEventFeedback(getString(R.string.events_summary, loaded.size(), matchedCount));
                 currentEvents = loaded;
                 refreshEventFilters(loaded);
