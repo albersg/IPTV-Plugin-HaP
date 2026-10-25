@@ -26,14 +26,15 @@ distinction has to be known, because the failure message says nothing about it.
 
 ## System packages
 
-The emulator needs Qt, X libraries and audio even when it runs headless. Without them it aborts with
+The emulator needs Qt, X libraries and audio even when it runs headless. `libsm6` is the one that is
+easy to miss, because the emulator blames `xcb-cursor` instead. Without them it aborts with
 messages that point somewhere else entirely:
 
 ```bash
 sudo apt-get install -y libpulse0 libnss3 libxcb1 libxdamage1 libxcomposite1 libxrandr2 \
     libxtst6 libasound2t64 libxkbfile1 libxi6 libxcursor1 libxinerama1 libgl1 libglu1-mesa \
     libx11-xcb1 libxcb-keysyms1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-render-util0 \
-    libxcb-shape0 libxcb-xinerama0 libxkbcommon-x11-0
+    libxcb-shape0 libxcb-xinerama0 libxkbcommon-x11-0 libsm6 libice6
 ```
 
 And the user must be able to open `/dev/kvm`:
@@ -45,9 +46,17 @@ sudo chmod 666 /dev/kvm      # applies immediately
 
 ## Three failures worth knowing, because each one lies about its cause
 
-1. **`no Qt platform plugin could be initialized`** — every library of the plugin is present and it
-   still fails. Under WSLg the xcb plugin will not start. `-no-window` avoids Qt altogether and the
-   screen is read with `screencap`.
+1. **`no Qt platform plugin could be initialized`** — and it is **not** the `xcb-cursor` the emulator
+   suggests. The plugin is present and still fails because one of its own dependencies is missing:
+   **`libSM.so.6`** (package `libsm6`, with `libice6`). The only way to see that is
+   `QT_DEBUG_PLUGINS=1`, which prints the `dlopen` error the normal message hides:
+
+   ```
+   libqxcbAndroidEmu.so cannot load: (libSM.so.6: cannot open shared object file)
+   ```
+
+   With `libsm6` installed the window opens normally under WSLg. `-no-window` still works and is used
+   when no display is wanted, but it is no longer a workaround for a broken plugin.
 2. **`FATAL: Failed to create jwk directory ... Permission denied`** — a previous run as root left
    `/run/user/<uid>/avd` unwritable. The fix is a private runtime directory, which the script sets:
    `XDG_RUNTIME_DIR=/tmp/xdg-$USER`.

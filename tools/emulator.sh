@@ -12,6 +12,7 @@
 #   tools/emulator.sh              # boot if needed, install the arm64 build, open HaP, screenshot
 #   tools/emulator.sh --screenshot # only take a screenshot of whatever is on screen
 #   tools/emulator.sh --stop       # shut the emulator down
+#   HAP_HEADLESS=1 tools/emulator.sh   # no window (CI, or a machine without a display)
 #
 # Requires the packages listed in docs/Emulator.md and a writable XDG_RUNTIME_DIR (see there).
 set -euo pipefail
@@ -52,15 +53,14 @@ if ! "$ADB" devices | grep -q "emulator-.*device"; then
         echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             -n "$AVD" -k "$IMAGE" -d tv_1080p --force
         printf 'hw.lcd.width=1920\nhw.lcd.height=1080\nhw.lcd.density=320\nhw.keyboard=yes\n' \
-            >> "$HOME/.android/avd/$AVD.avd/config.inargv"
-        printf 'hw.lcd.width=1920\nhw.lcd.height=1080\nhw.lcd.density=320\nhw.keyboard=yes\n' \
             >> "$HOME/.android/avd/$AVD.avd/config.ini"
-        rm -f "$HOME/.android/avd/$AVD.avd/config.inargv"
     fi
     echo "booting $AVD"
-    # -no-window: the Qt xcb plugin cannot start under WSLg even with every library present, and
-    # the screen is read through screencap anyway.
-    nohup "$ANDROID_HOME/emulator/emulator" -avd "$AVD" -no-window \
+    # A window by default: the Qt xcb plugin works once libSM is installed (docs/Emulator.md).
+    # HAP_HEADLESS=1 skips it, which is what a machine without a display needs.
+    window=""
+    [ -n "${HAP_HEADLESS:-}" ] && window="-no-window"
+    nohup "$ANDROID_HOME/emulator/emulator" -avd "$AVD" $window \
         -gpu swiftshader_indirect -no-snapshot -no-audio -no-boot-anim > /tmp/hap-emulator.log 2>&1 &
     "$ADB" wait-for-device
     for _ in $(seq 1 60); do
@@ -70,7 +70,27 @@ if ! "$ADB" devices | grep -q "emulator-.*device"; then
 fi
 
 [ -f "$APK" ] || { echo "missing $APK - run: ./gradlew :app:assembleArm64Release" >&2; exit 1; }
-"$ADB" install -r "$APK"
+
+# The release build is unsigned and the emulator refuses it with INSTALL_PARSE_FAILED_NO_CERTIFICATES,
+# so sign first with the same key the releases use. Credentials come from the environment and are
+# never written down here.
+install_apk="$APK"
+case "$APK" in
+    *-unsigned.apk)
+        if [ -n "${SIGNING_STORE_FILE:-}" ]; then
+            signed="/tmp/hap-signed-$(basename "$APK" -unsigned.apk).apk"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+                --ks "$SIGNING_STORE_FILE" --ks-pass "pass:$SIGNING_STORE_PASSWORD" \
+                --ks-key-alias "${SIGNING_KEY_ALIAS:-hap}" --key-pass "pass:$SIGNING_KEY_PASSWORD" \
+                --out "$signed" "$APK"
+            install_apk="$signed"
+        else
+            echo "the APK is unsigned: export SIGNING_STORE_FILE and the passwords, or set HAP_APK" >&2
+            exit 1
+        fi
+        ;;
+esac
+"$ADB" install -r "$install_apk"
 "$ADB" shell am start -n com.streamvault.plugin.hap/.HapConfigActivity
 sleep 3
 screenshot
