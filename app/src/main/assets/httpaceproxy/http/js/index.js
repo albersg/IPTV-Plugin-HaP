@@ -110,6 +110,22 @@ $(document).ready(function() {
         }
     }
 
+    // Security: every value below comes from the network. Channel names, icons and the
+    // client address are attacker-controlled, and jQuery's $("<html>") executes markup,
+    // so nothing may be concatenated into a table row before being escaped.
+    function hapEscape(value) {
+        return String(value === null || value === undefined ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Only allow http(s) and root-relative icons; anything else (javascript:, data:) is dropped.
+    function hapSafeUrl(value) {
+        var url = String(value === null || value === undefined ? '' : value).trim();
+        if (/^(https?:\/\/|\/)/i.test(url)) return hapEscape(url);
+        return '';
+    }
+
     // Render Table Body
     function renderClientsTable(clients_data) {
         var $tbody = $('tbody'),
@@ -134,7 +150,7 @@ $(document).ready(function() {
 
                 stat_status = typeof item.stat['status'] == "undefined" ? "n/a" : item.stat['status'],
 
-                peers_html = stat_peers + '<span class="badge badge-pill badge-' + badgeCss + ' bage-fixsize">' + stat_status + '</span>',
+                peers_html = hapEscape(stat_peers) + '<span class="badge badge-pill badge-' + badgeCss + ' bage-fixsize">' + hapEscape(stat_status) + '</span>',
 
                 speed_down = typeof item.stat['speed_down'] == "undefined" ? "n/a" : item.stat['speed_down'],
 
@@ -146,16 +162,17 @@ $(document).ready(function() {
 
             if ($row.length === 0) {
 
-                var clientInfo = item.clientInfo.vendor ? item.clientInfo.vendor :
-                    '<i class="flag ' + (item.clientInfo.country_code.toLowerCase() || 'n/a') + '"></i>&nbsp;&nbsp;' +
-                    (item.clientInfo.country_name || 'n/a') +', ' + (item.clientInfo.city || 'n/a');
+                var countryCode = hapEscape(String(item.clientInfo.country_code || '').toLowerCase().replace(/[^a-z]/g, '')) || 'n/a',
+                    clientInfo = item.clientInfo.vendor ? hapEscape(item.clientInfo.vendor) :
+                    '<i class="flag ' + countryCode + '"></i>&nbsp;&nbsp;' +
+                    hapEscape(item.clientInfo.country_name || 'n/a') +', ' + hapEscape(item.clientInfo.city || 'n/a');
 
-                var $row = $('<tr id="' + rowID + '">' +
-                              '<td><img src="' + item.channelIcon + '"/>&nbsp;&nbsp;' + item.channelName + '</td>' +
-                              '<td>' + item.clientIP + '</td>'+
+                var $row = $('<tr id="' + hapEscape(rowID) + '">' +
+                              '<td><img src="' + hapSafeUrl(item.channelIcon) + '"/>&nbsp;&nbsp;' + hapEscape(item.channelName) + '</td>' +
+                              '<td>' + hapEscape(item.clientIP) + '</td>'+
                               '<td>' + clientInfo + '</td>' +
-                              '<td class="text-center">' + item.startTime + '</td>' +
-                              '<td class="text-center duration-time">' + item.durationTime + '</td>' +
+                              '<td class="text-center">' + hapEscape(item.startTime) + '</td>' +
+                              '<td class="text-center duration-time">' + hapEscape(item.durationTime) + '</td>' +
                               '<td class="text-center">' +
                                   '<div class="digit-speed text-right speed-down">'+ speed_down + '</div>' +
                                   '<img src="/stat/img/arrow-down.svg"/><img src="/stat/img/arrow-up.svg"/>' +
