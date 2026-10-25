@@ -3111,13 +3111,12 @@ public class HapConfigActivity extends Activity {
      */
     private void selectChannel(HapRows.Channel channel) {
         selectedChannelContentId = channel.contentId;
-        HapBridge.PeerResultInfo result = peerResults.get(channel.contentId);
         renderChannels();
-        if (result != null && result.available) {
-            watchChannel(channel);
-            return;
-        }
-        checkChannel(channel.contentId, channel.name);
+        // OK on a channel plays it, always. It used to check first and only play when the check said
+        // the channel was alive, which made the button dead: the peer check does not answer on this
+        // engine, so a channel could never be watched from the list. Playback does not depend on that
+        // check at all - the player's request is what starts the broadcast.
+        watchChannel(channel);
     }
 
     /**
