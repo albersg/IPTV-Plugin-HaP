@@ -3130,8 +3130,11 @@ public class HapConfigActivity extends Activity {
     private void watchChannel(HapRows.Channel channel) {
         if (channel.contentId == null || channel.contentId.trim().isEmpty()) return;
         String url = HapBridge.channelUrl(channel.contentId, channel.name);
+        // "video/*", not "video/mp2t". The box's own player (MiTV) declares its filter as the partial
+        // type "video" plus "video/*", and AceStream Pro declares video/mp2t: a wildcard is what matches
+        // both. A concrete subtype excluded some players, and no type at all excluded MiTV.
         Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setDataAndType(Uri.parse(url), "video/mp2t");
+        intent.setDataAndType(Uri.parse(url), "video/*");
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(intent);
