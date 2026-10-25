@@ -50,7 +50,7 @@ public final class FocusRefreshPurityTest {
             "private void applyCaption(TextView view, String text)",
             "private void applySwitches(RuntimeSnapshot snapshot)",
             "private void applyIpfsGateway(String url)",
-            "private void renderEndpoints(List<EndpointModel> rows)",
+            "private void renderEndpoints(List<HapRows.Endpoint> rows)",
             "private void renderSources()",
             "private void renderCustomChannels()",
             "private void renderClients(List<HapBridge.ConnectedClientInfo> clients)",

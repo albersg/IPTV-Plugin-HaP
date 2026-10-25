@@ -148,12 +148,25 @@ public class HapConfigActivity extends Activity {
     private TextView messageView;
     private LinearLayout endpointsContainer;
     private LinearLayout sourcesListContainer;
+    private TextView sourcesHintView;
     private LinearLayout customListContainer;
+    private TextView customHintView;
     private LinearLayout clientsContainer;
     private TextView clientsStatusView;
     private LinearLayout pluginTabsContainer;
     private LinearLayout channelRowsContainer;
+    private TextView channelsHintView;
     private TextView channelFeedbackView;
+    /**
+     * The six row lists of the screen. Each one keeps its children and rebinds them, so a refresh
+     * never loses a row — and never loses the focus that was on it (S7).
+     */
+    private InPlaceList<HapRows.Endpoint> endpointList;
+    private InPlaceList<HapRows.Source> sourceList;
+    private InPlaceList<HapRows.CustomChannel> customChannelList;
+    private InPlaceList<HapRows.Client> clientList;
+    private InPlaceList<HapRows.PluginTab> pluginTabList;
+    private InPlaceList<HapRows.Channel> channelList;
     private Button stopChannelTestButton;
     private TextView logView;
     private Switch enabledSwitch;
@@ -163,6 +176,7 @@ public class HapConfigActivity extends Activity {
     private Pill ipfsStatePill;
     private TextView ipfsErrorView;
     private LinearLayout ipfsGatewayContainer;
+    private View ipfsGatewayRow;
     private TextView ipfsGatewayValueView;
     private String ipfsGatewayValue = "";
     private Switch ipfsExternalSwitch;
@@ -189,7 +203,6 @@ public class HapConfigActivity extends Activity {
     private int customEditingIndex = -1;
     private volatile HapBridge.PeerRequest inFlightPeerRequest;
     private volatile boolean destroyed;
-    private List<EndpointModel> renderedEndpoints;
     private String renderedLogText;
     private boolean suppressSwitchCallbacks;
 
@@ -692,9 +705,33 @@ public class HapConfigActivity extends Activity {
         ipfsGatewayContainer.setOrientation(LinearLayout.VERTICAL);
         ipfsGatewayContainer.setPadding(0, dp(8), 0, 0);
         panel.body.addView(ipfsGatewayContainer, matchWrap());
+        // Built once with the panel; the refresh only re-labels it and shows or hides it.
+        ipfsGatewayRow = buildIpfsGatewayRow();
+        ipfsGatewayRow.setVisibility(View.GONE);
+        ipfsGatewayContainer.addView(ipfsGatewayRow, matchWrap());
 
         // The advanced block is its own panel in Ajustes, so it is not nested twice here.
         return panel.container;
+    }
+
+    /** The single gateway row of the IPFS panel, built once so the refresh only re-labels it. */
+    private View buildIpfsGatewayRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        row.addView(pill(getString(R.string.label_ipfs_gateway_url), COLOR_SURFACE, COLOR_TEXT_SECONDARY), wrapWrap());
+
+        ipfsGatewayValueView = text("", 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+        ipfsGatewayValueView.setSingleLine(true);
+        ipfsGatewayValueView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+        ipfsGatewayValueView.setPadding(dp(8), 0, dp(8), 0);
+        row.addView(ipfsGatewayValueView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button copy = smallButton(getString(R.string.button_copy));
+        copy.setOnClickListener(v -> copyToClipboard("HaP IPFS gateway", ipfsGatewayValue));
+        row.addView(copy, wrapWrap());
+        return row;
     }
 
     private View buildIpfsAdvancedSection() {
@@ -799,6 +836,7 @@ public class HapConfigActivity extends Activity {
         endpointsContainer.setOrientation(LinearLayout.VERTICAL);
         endpointsContainer.setPadding(0, dp(6), 0, 0);
         left.addView(endpointsContainer, matchWrap());
+        endpointList = new InPlaceList<>(endpointsContainer, () -> new EndpointRow());
 
         LinearLayout right = new LinearLayout(this);
         right.setOrientation(LinearLayout.HORIZONTAL);
@@ -870,6 +908,12 @@ public class HapConfigActivity extends Activity {
         sourcesListContainer.setOrientation(LinearLayout.VERTICAL);
         sourcesListContainer.setPadding(0, dp(12), 0, 0);
         panel.body.addView(sourcesListContainer, matchWrap());
+        // The empty-state line lives beside the list and is only shown or hidden: it is not a row.
+        sourcesHintView = text(getString(R.string.message_no_sources), 13, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+        sourcesHintView.setVisibility(View.GONE);
+        panel.body.addView(sourcesHintView, matchWrapTop(12));
+        sourceList = new InPlaceList<>(sourcesListContainer, () ->
+                new SourceRow(sourcesListContainer.getChildCount() == 0 ? 0 : 8));
 
         return panel.container;
     }
@@ -919,6 +963,11 @@ public class HapConfigActivity extends Activity {
         customListContainer.setOrientation(LinearLayout.VERTICAL);
         customListContainer.setPadding(0, dp(10), 0, 0);
         panel.body.addView(customListContainer, matchWrap());
+        customHintView = text(getString(R.string.message_no_custom_channels), 13, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+        customHintView.setVisibility(View.GONE);
+        panel.body.addView(customHintView, matchWrapTop(10));
+        customChannelList = new InPlaceList<>(customListContainer, () ->
+                new CustomChannelRow(customListContainer.getChildCount() == 0 ? 0 : 8));
 
         return panel.container;
     }
@@ -943,6 +992,8 @@ public class HapConfigActivity extends Activity {
         clientsContainer.setOrientation(LinearLayout.VERTICAL);
         clientsContainer.setPadding(0, dp(10), 0, 0);
         panel.body.addView(clientsContainer, matchWrap());
+        clientList = new InPlaceList<>(clientsContainer, () ->
+                new ClientRow(clientsContainer.getChildCount() == 0 ? 0 : 8));
 
         return panel.container;
     }
@@ -993,6 +1044,8 @@ public class HapConfigActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
         panel.body.addView(pluginScroll, matchWrap());
+        pluginTabList = new InPlaceList<>(pluginTabsContainer, () ->
+                new PluginTabRow(pluginTabsContainer.getChildCount() == 0 ? 0 : 8));
 
         ScrollView channelsScroll = new ScrollView(this);
         channelsScroll.setFillViewport(false);
@@ -1005,12 +1058,22 @@ public class HapConfigActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
+        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        hintParams.topMargin = dp(10);
         LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
         listParams.topMargin = dp(10);
+        channelsHintView = text(getString(R.string.message_load_channels_hint), 13, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+        channelsHintView.setVisibility(View.GONE);
+        panel.body.addView(channelsHintView, hintParams);
         panel.body.addView(channelsScroll, listParams);
+        channelList = new InPlaceList<>(channelRowsContainer, () ->
+                new ChannelRow(channelRowsContainer.getChildCount() == 0 ? 0 : 8));
         renderChannels();
 
         return panel.container;
@@ -1837,7 +1900,9 @@ public class HapConfigActivity extends Activity {
         applyCaption(ipfsErrorView, snapshot.ipfsErrorText);
         applyIpfsGateway(snapshot.ipfsGatewayUrl);
 
-        if (!sameEndpoints(renderedEndpoints, snapshot.endpoints)) renderEndpoints(snapshot.endpoints);
+        // The endpoint list decides for itself whether the rows changed, so an unchanged tick
+        // performs no view work at all.
+        renderEndpoints(snapshot.endpoints);
 
         if (!TextUtils.equals(renderedLogText, snapshot.logText)) {
             renderedLogText = snapshot.logText;
@@ -1853,6 +1918,21 @@ public class HapConfigActivity extends Activity {
         if (visible && !TextUtils.equals(text, view.getText())) view.setText(text);
         int visibility = visible ? View.VISIBLE : View.GONE;
         if (view.getVisibility() != visibility) view.setVisibility(visibility);
+    }
+
+    /**
+     * Writes a label only when the view does not already say it. This is what makes an update that
+     * produces the same model reach neither {@code setText} nor a re-layout (S7).
+     */
+    private void applyText(TextView view, String text) {
+        String value = text == null ? "" : text;
+        if (ListPatch.needsText(view.getText(), value)) view.setText(value);
+    }
+
+    /** Shows or hides a control only when its visibility actually differs. */
+    private void applyVisibility(View view, boolean visible) {
+        int wanted = visible ? View.VISIBLE : View.GONE;
+        if (view.getVisibility() != wanted) view.setVisibility(wanted);
     }
 
     private void applySwitches(RuntimeSnapshot snapshot) {
@@ -1893,8 +1973,8 @@ public class HapConfigActivity extends Activity {
     }
 
     /** Computed off the main thread; the LAN URLs come from the same status read. */
-    private List<EndpointModel> endpointRows(HapBridge.HapStatus status) {
-        List<EndpointModel> rows = new ArrayList<>();
+    private List<HapRows.Endpoint> endpointRows(HapBridge.HapStatus status) {
+        List<HapRows.Endpoint> rows = new ArrayList<>();
         List<String> shown = new ArrayList<>();
         addEndpointRow(rows, shown, getString(R.string.label_local_m3u), HapBridge.LOCAL_AIO_URL);
         addEndpointRow(rows, shown, getString(R.string.label_local_epg), HapBridge.LOCAL_AIO_EPG_URL);
@@ -1909,251 +1989,513 @@ public class HapConfigActivity extends Activity {
         return rows;
     }
 
-    private void addEndpointRow(List<EndpointModel> rows, List<String> shown, String label, String url) {
+    private void addEndpointRow(List<HapRows.Endpoint> rows, List<String> shown, String label, String url) {
         if (shown.contains(url)) return;
         shown.add(url);
-        rows.add(new EndpointModel(label, url));
+        rows.add(new HapRows.Endpoint(label, url));
     }
 
-    private boolean sameEndpoints(List<EndpointModel> left, List<EndpointModel> right) {
-        if (left == null || right == null || left.size() != right.size()) return false;
-        for (int i = 0; i < left.size(); i++) {
-            if (!TextUtils.equals(left.get(i).label, right.get(i).label)) return false;
-            if (!TextUtils.equals(left.get(i).url, right.get(i).url)) return false;
+    /**
+     * Applies the endpoint rows. Nothing is cleared: a row that is still there is rebound, only the
+     * missing tail is created and only the surplus tail is dropped, so a copy button keeps its
+     * focus across a refresh that adds or removes one LAN address.
+     */
+    private void renderEndpoints(List<HapRows.Endpoint> rows) {
+        endpointList.apply(rows);
+    }
+
+    /** One endpoint row: its label pill, the URL and the button that copies it. */
+    private final class EndpointRow implements InPlaceList.Row<HapRows.Endpoint> {
+
+        private final LinearLayout row;
+        private final TextView labelView;
+        private final TextView valueView;
+        /** The URL the copy button reads at click time, so the listener is registered once. */
+        private String url = "";
+
+        EndpointRow() {
+            row = new LinearLayout(HapConfigActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(3), 0, dp(3));
+            row.setLayoutParams(matchWrap());
+
+            labelView = pill("", COLOR_SURFACE, COLOR_TEXT_SECONDARY);
+            row.addView(labelView, wrapWrap());
+
+            valueView = text("", 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+            valueView.setSingleLine(true);
+            valueView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+            valueView.setPadding(dp(8), 0, dp(8), 0);
+            row.addView(valueView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            Button copy = smallButton(getString(R.string.button_copy));
+            copy.setOnClickListener(v -> copyToClipboard("HaP URL", url));
+            row.addView(copy, wrapWrap());
         }
-        return true;
+
+        @Override
+        public View view() {
+            return row;
+        }
+
+        @Override
+        public void bind(HapRows.Endpoint item) {
+            applyText(labelView, item.label);
+            applyText(valueView, item.url);
+            url = item.url;
+        }
     }
 
-    /** Rebuilds the endpoint rows; only reached when the rendered set actually changed. */
-    private void renderEndpoints(List<EndpointModel> rows) {
-        renderedEndpoints = rows;
-        endpointsContainer.removeAllViews();
-        for (EndpointModel endpoint : rows) addEndpointRow(endpoint.label, endpoint.url);
-    }
-
-    private void addEndpointRow(String label, String url) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(3), 0, dp(3));
-
-        row.addView(pill(label, COLOR_SURFACE, COLOR_TEXT_SECONDARY), wrapWrap());
-
-        TextView value = text(url, 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
-        value.setSingleLine(true);
-        value.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        value.setPadding(dp(8), 0, dp(8), 0);
-        row.addView(value, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        Button copy = smallButton(getString(R.string.button_copy));
-        copy.setOnClickListener(v -> copyToClipboard("HaP URL", url));
-        row.addView(copy, wrapWrap());
-
-        endpointsContainer.addView(row, matchWrap());
-    }
-
+    /**
+     * Applies the M3U source rows. The set is effectively fixed-key: a source keeps its index while
+     * it exists, so its checkbox, its edit/delete buttons and the focus inside the row are the same
+     * objects on every update instead of eight fresh views per refresh.
+     */
     private void renderSources() {
-        sourcesListContainer.removeAllViews();
-
         boolean hasM3uSources = false;
+        List<HapRows.Source> rows = new ArrayList<>(currentSources.size() + 1);
         for (HapBridge.SourceInfo source : currentSources) {
             if (!"M3U".equals(source.format)) continue;
             hasM3uSources = true;
-            sourcesListContainer.addView(sourceRow(source), matchWrapTop(sourcesListContainer.getChildCount() == 0 ? 0 : 8));
+            rows.add(sourceRowModel(source));
         }
-
-        if (!hasM3uSources) {
-            sourcesListContainer.addView(text(getString(R.string.message_no_sources), 13, COLOR_TEXT_TERTIARY, Typeface.NORMAL), matchWrap());
-        }
-
         HapBridge.SourceInfo custom = customSource();
+        if (custom != null) rows.add(sourceRowModel(custom));
+
+        applyVisibility(sourcesHintView, !hasM3uSources);
+        sourceList.apply(rows);
+
         if (custom != null) {
-            sourcesListContainer.addView(sourceRow(custom), matchWrapTop(10));
             // The custom channel list has its own panel in Fuentes now, so this only refreshes
             // it instead of building a second copy inside the sources panel.
             renderCustomChannels();
         }
     }
 
-    private View sourceRow(HapBridge.SourceInfo source) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(10), dp(8), dp(10), dp(8));
-        row.setBackground(roundRect(COLOR_PANEL_SOFT, dp(10), 0, 0));
-
-        CheckBox selected = new CheckBox(this);
-        selected.setButtonTintList(android.content.res.ColorStateList.valueOf(COLOR_BRAND));
-        selected.setChecked(source.selected);
-        selected.setOnCheckedChangeListener((buttonView, checked) -> setSourceSelected(source.id, checked));
-        row.addView(selected, wrapWrap());
-
-        LinearLayout left = new LinearLayout(this);
-        left.setOrientation(LinearLayout.VERTICAL);
-        left.setPadding(dp(4), 0, dp(8), 0);
-        row.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        left.addView(text(source.label, 14, COLOR_TEXT_PRIMARY, Typeface.BOLD), matchWrap());
-        TextView value = text("CUSTOM".equals(source.format) ? source.description : source.value, 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
-        value.setSingleLine(true);
-        value.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        left.addView(value, matchWrap());
-
-        if (source.removable) {
-            Button edit = smallButton(getString(R.string.button_edit));
-            edit.setOnClickListener(v -> editM3uSource(source));
-            row.addView(edit, wrapWrapLeft(8));
-
-            Button delete = smallButton(getString(R.string.button_delete));
-            delete.setOnClickListener(v -> deleteM3uSource(source.id));
-            row.addView(delete, wrapWrapLeft(8));
-        }
-
-        return row;
+    private HapRows.Source sourceRowModel(HapBridge.SourceInfo source) {
+        String secondary = "CUSTOM".equals(source.format) ? source.description : source.value;
+        return new HapRows.Source(
+                source.id,
+                source.label,
+                source.value,
+                secondary,
+                source.selected,
+                source.removable
+        );
     }
 
-    private void renderCustomChannels() {
-        if (customListContainer == null) return;
-        customListContainer.removeAllViews();
-        if (currentCustomChannels.isEmpty()) {
-            customListContainer.addView(text(getString(R.string.message_no_custom_channels), 13, COLOR_TEXT_TERTIARY, Typeface.NORMAL), matchWrap());
-            return;
-        }
+    /** One source row: its select checkbox, its two lines and the edit/delete controls. */
+    private final class SourceRow implements InPlaceList.Row<HapRows.Source> {
 
-        for (HapBridge.CustomChannelInfo channel : currentCustomChannels) {
-            LinearLayout row = new LinearLayout(this);
+        private final LinearLayout row;
+        private final CheckBox selected;
+        private final TextView labelView;
+        private final TextView valueView;
+        private final Button edit;
+        private final Button delete;
+        /** The item the listeners act on; rebound in place, never re-registered. */
+        private HapRows.Source item;
+        /** -1 until the first bind, so the first check is not mistaken for a user action. */
+        private int appliedSelected = -1;
+        /** {@code setChecked} fires the listener; rebinding is not the user selecting a source. */
+        private boolean binding;
+
+        SourceRow(int topMargin) {
+            row = new LinearLayout(HapConfigActivity.this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(10), dp(8), dp(10), dp(8));
             row.setBackground(roundRect(COLOR_PANEL_SOFT, dp(10), 0, 0));
+            row.setLayoutParams(matchWrapTop(topMargin));
 
-            LinearLayout left = new LinearLayout(this);
+            selected = new CheckBox(HapConfigActivity.this);
+            selected.setButtonTintList(android.content.res.ColorStateList.valueOf(COLOR_BRAND));
+            selected.setOnCheckedChangeListener((buttonView, checked) -> {
+                if (binding || item == null) return;
+                setSourceSelected(item.id, checked);
+            });
+            row.addView(selected, wrapWrap());
+
+            LinearLayout left = new LinearLayout(HapConfigActivity.this);
+            left.setOrientation(LinearLayout.VERTICAL);
+            left.setPadding(dp(4), 0, dp(8), 0);
+            row.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            labelView = text("", 14, COLOR_TEXT_PRIMARY, Typeface.BOLD);
+            left.addView(labelView, matchWrap());
+
+            valueView = text("", 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+            valueView.setSingleLine(true);
+            valueView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+            left.addView(valueView, matchWrap());
+
+            edit = smallButton(getString(R.string.button_edit));
+            edit.setOnClickListener(v -> {
+                if (item != null) editM3uSource(item);
+            });
+            row.addView(edit, wrapWrapLeft(8));
+
+            delete = smallButton(getString(R.string.button_delete));
+            delete.setOnClickListener(v -> {
+                if (item != null) deleteM3uSource(item.id);
+            });
+            row.addView(delete, wrapWrapLeft(8));
+        }
+
+        @Override
+        public View view() {
+            return row;
+        }
+
+        @Override
+        public void bind(HapRows.Source next) {
+            item = next;
+            int wanted = next.selected ? 1 : 0;
+            if (appliedSelected != wanted) {
+                appliedSelected = wanted;
+                binding = true;
+                try {
+                    selected.setChecked(next.selected);
+                } finally {
+                    binding = false;
+                }
+            }
+            applyText(labelView, next.label);
+            applyText(valueView, next.secondary);
+            // Only a removable source offers edit and delete; the controls stay, they are hidden.
+            applyVisibility(edit, next.removable);
+            applyVisibility(delete, next.removable);
+        }
+    }
+
+    /** Applies the custom channel rows in place: a deletion only drops the surplus tail. */
+    private void renderCustomChannels() {
+        if (customListContainer == null) return;
+        List<HapRows.CustomChannel> rows = new ArrayList<>(currentCustomChannels.size());
+        for (HapBridge.CustomChannelInfo channel : currentCustomChannels) {
+            rows.add(new HapRows.CustomChannel(channel.index, channel.name, channel.contentId));
+        }
+        applyVisibility(customHintView, rows.isEmpty());
+        customChannelList.apply(rows);
+    }
+
+    /** One custom channel row: the name, the AceStream id and its edit/delete controls. */
+    private final class CustomChannelRow implements InPlaceList.Row<HapRows.CustomChannel> {
+
+        private final LinearLayout row;
+        private final TextView nameView;
+        private final TextView contentView;
+        private HapRows.CustomChannel item;
+
+        CustomChannelRow(int topMargin) {
+            row = new LinearLayout(HapConfigActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(10), dp(8), dp(10), dp(8));
+            row.setBackground(roundRect(COLOR_PANEL_SOFT, dp(10), 0, 0));
+            row.setLayoutParams(matchWrapTop(topMargin));
+
+            LinearLayout left = new LinearLayout(HapConfigActivity.this);
             left.setOrientation(LinearLayout.VERTICAL);
             row.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-            left.addView(text(channel.name, 14, COLOR_TEXT_PRIMARY, Typeface.BOLD), matchWrap());
-            TextView content = text(channel.contentId, 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
-            content.setSingleLine(true);
-            content.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-            left.addView(content, matchWrap());
+            nameView = text("", 14, COLOR_TEXT_PRIMARY, Typeface.BOLD);
+            left.addView(nameView, matchWrap());
+
+            contentView = text("", 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+            contentView.setSingleLine(true);
+            contentView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+            left.addView(contentView, matchWrap());
 
             Button edit = smallButton(getString(R.string.button_edit));
-            edit.setOnClickListener(v -> editCustomChannel(channel));
+            edit.setOnClickListener(v -> {
+                if (item != null) editCustomChannel(item);
+            });
             row.addView(edit, wrapWrapLeft(8));
 
             Button delete = smallButton(getString(R.string.button_delete));
-            delete.setOnClickListener(v -> deleteCustomChannel(channel.index));
+            delete.setOnClickListener(v -> {
+                if (item != null) deleteCustomChannel(item.index);
+            });
             row.addView(delete, wrapWrapLeft(8));
+        }
 
-            customListContainer.addView(row, matchWrapTop(customListContainer.getChildCount() == 0 ? 0 : 8));
+        @Override
+        public View view() {
+            return row;
+        }
+
+        @Override
+        public void bind(HapRows.CustomChannel next) {
+            item = next;
+            applyText(nameView, next.name);
+            applyText(contentView, next.contentId);
         }
     }
 
+    /** Applies the connected client rows in place; the status line only changes when it differs. */
     private void renderClients(List<HapBridge.ConnectedClientInfo> clients) {
-        clientsContainer.removeAllViews();
-        clientsStatusView.setText(clients.isEmpty()
+        applyText(clientsStatusView, clients.isEmpty()
                 ? getString(R.string.message_no_active_clients)
                 : getString(R.string.message_client_count, clients.size()));
+
+        List<HapRows.Client> rows = new ArrayList<>(clients.size());
         for (HapBridge.ConnectedClientInfo client : clients) {
-            LinearLayout row = new LinearLayout(this);
+            rows.add(new HapRows.Client(
+                    client.ip,
+                    client.device,
+                    client.channel,
+                    String.format(Locale.US, "%.1f MB", client.megabytes)
+            ));
+        }
+        clientList.apply(rows);
+    }
+
+    /** One connected client row: address, player, channel and how much it has read. */
+    private final class ClientRow implements InPlaceList.Row<HapRows.Client> {
+
+        private final LinearLayout row;
+        private final TextView ipView;
+        private final TextView deviceView;
+        private final TextView channelView;
+        private final TextView megabytesView;
+
+        ClientRow(int topMargin) {
+            row = new LinearLayout(HapConfigActivity.this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(10), dp(8), dp(10), dp(8));
             row.setBackground(roundRect(COLOR_PANEL_SOFT, dp(10), 0, 0));
+            row.setLayoutParams(matchWrapTop(topMargin));
 
-            row.addView(weightedText(client.ip, 0.18f, COLOR_TEXT_PRIMARY, true));
-            row.addView(weightedText(client.device, 0.22f, COLOR_TEXT_SECONDARY, false));
-            row.addView(weightedText(client.channel, 0.43f, COLOR_TEXT_SECONDARY, false));
-            row.addView(text(String.format(Locale.US, "%.1f MB", client.megabytes), 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL), wrapWrap());
+            ipView = weightedText("", 0.18f, COLOR_TEXT_PRIMARY, true);
+            row.addView(ipView);
+            deviceView = weightedText("", 0.22f, COLOR_TEXT_SECONDARY, false);
+            row.addView(deviceView);
+            channelView = weightedText("", 0.43f, COLOR_TEXT_SECONDARY, false);
+            row.addView(channelView);
+            megabytesView = text("", 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+            row.addView(megabytesView, wrapWrap());
+        }
 
-            clientsContainer.addView(row, matchWrapTop(clientsContainer.getChildCount() == 0 ? 0 : 8));
+        @Override
+        public View view() {
+            return row;
+        }
+
+        @Override
+        public void bind(HapRows.Client next) {
+            applyText(ipView, next.ip);
+            applyText(deviceView, next.device);
+            applyText(channelView, next.channel);
+            applyText(megabytesView, next.megabytes);
         }
     }
 
+    /** Applies the plugin tabs in place; a new selection only re-colours the tabs that changed. */
     private void renderChannelPlugins() {
-        pluginTabsContainer.removeAllViews();
+        List<HapRows.PluginTab> rows = new ArrayList<>(channelPlugins.size());
         for (HapBridge.PluginChannelsInfo plugin : channelPlugins) {
-            boolean selected = plugin.id.equals(selectedPluginId);
-            TextView tab = pill(plugin.label + " (" + plugin.channels.size() + ")",
-                    selected ? COLOR_BRAND_MUTED : COLOR_SURFACE,
-                    selected ? COLOR_BRAND : COLOR_TEXT_SECONDARY);
-            tab.setBackground(focusBackground(
-                    selected ? COLOR_BRAND_MUTED : COLOR_SURFACE,
-                    COLOR_SURFACE_FOCUSED,
-                    dp(999),
-                    dp(1),
-                    selected ? COLOR_BRAND : COLOR_STROKE
+            rows.add(new HapRows.PluginTab(
+                    plugin.id,
+                    plugin.label,
+                    plugin.channels.size(),
+                    plugin.id.equals(selectedPluginId),
+                    plugin.channels.isEmpty() ? null : plugin.channels.get(0).contentId
             ));
-            tab.setClickable(true);
-            tab.setFocusable(true);
-            tab.setMinHeight(dp(36));
-            tab.setOnClickListener(v -> {
-                selectedPluginId = plugin.id;
-                selectedChannelContentId = plugin.channels.isEmpty() ? null : plugin.channels.get(0).contentId;
-                renderChannelPlugins();
-                renderChannels();
-                renderChannelFeedback(null);
-            });
-            pluginTabsContainer.addView(tab, wrapWrapLeft(pluginTabsContainer.getChildCount() == 0 ? 0 : 8));
         }
+        pluginTabList.apply(rows);
         renderChannels();
     }
 
+    /** One plugin tab: the pill the user selects a list with. */
+    private final class PluginTabRow implements InPlaceList.Row<HapRows.PluginTab> {
+
+        private final TextView tab;
+        private HapRows.PluginTab item;
+        /** -1 until the first bind, so the first paint is not mistaken for a selection change. */
+        private int appliedSelected = -1;
+
+        PluginTabRow(int leftMargin) {
+            tab = pill("", COLOR_SURFACE, COLOR_TEXT_SECONDARY);
+            tab.setFocusable(true);
+            tab.setClickable(true);
+            tab.setMinHeight(dp(36));
+            tab.setLayoutParams(wrapWrapLeft(leftMargin));
+            tab.setOnClickListener(v -> {
+                if (item != null) selectPlugin(item);
+            });
+        }
+
+        @Override
+        public View view() {
+            return tab;
+        }
+
+        @Override
+        public void bind(HapRows.PluginTab next) {
+            item = next;
+            applyText(tab, next.label + " (" + next.channelCount + ")");
+            int wanted = next.selected ? 1 : 0;
+            if (appliedSelected == wanted) return;
+            appliedSelected = wanted;
+            tab.setTextColor(next.selected ? COLOR_BRAND : COLOR_TEXT_SECONDARY);
+            tab.setBackground(focusBackground(
+                    next.selected ? COLOR_BRAND_MUTED : COLOR_SURFACE,
+                    COLOR_SURFACE_FOCUSED,
+                    dp(999),
+                    dp(1),
+                    next.selected ? COLOR_BRAND : COLOR_STROKE
+            ));
+        }
+    }
+
+    /** Selecting a tab picks its list and its first channel, exactly as the rebuilt tabs did. */
+    private void selectPlugin(HapRows.PluginTab tab) {
+        selectedPluginId = tab.id;
+        selectedChannelContentId = tab.firstChannelId;
+        renderChannelPlugins();
+        renderChannels();
+        renderChannelFeedback(null);
+    }
+
+    /**
+     * Applies the channel test rows in place. A peer result that arrives updates its own row, so the
+     * row the user is standing on keeps the focus while a list test is running.
+     */
     private void renderChannels() {
-        channelRowsContainer.removeAllViews();
         HapBridge.PluginChannelsInfo selectedPlugin = selectedPlugin();
+        applyVisibility(channelsHintView, selectedPlugin == null);
         if (selectedPlugin == null) {
-            channelRowsContainer.addView(text(getString(R.string.message_load_channels_hint), 13, COLOR_TEXT_TERTIARY, Typeface.NORMAL), matchWrap());
+            channelList.clear();
             return;
         }
 
+        List<HapRows.Channel> rows = new ArrayList<>(selectedPlugin.channels.size());
         for (HapBridge.ChannelInfo channel : selectedPlugin.channels) {
             HapBridge.PeerResultInfo result = peerResults.get(channel.contentId);
             boolean selected = channel.contentId.equals(selectedChannelContentId);
+            rows.add(new HapRows.Channel(
+                    channel.contentId,
+                    channel.name,
+                    selected,
+                    result == null ? null : peerDetailText(result),
+                    result == null ? 0 : peerColor(result),
+                    result == null ? null : peerShortStatus(result),
+                    result == null ? 0 : (result.available ? COLOR_SUCCESS_MUTED : COLOR_SURFACE),
+                    result == null ? 0 : (result.available ? COLOR_SUCCESS : COLOR_TEXT_TERTIARY)
+            ));
+        }
+        channelList.apply(rows);
+    }
 
-            LinearLayout row = new LinearLayout(this);
+    /**
+     * One channel test row. The detail line and the result pill are created with the row and only
+     * shown or hidden afterwards, so a result never changes the shape of the row it belongs to.
+     */
+    private final class ChannelRow implements InPlaceList.Row<HapRows.Channel> {
+
+        private final LinearLayout row;
+        private final TextView nameView;
+        private final TextView contentView;
+        private final TextView detailView;
+        private final TextView badgeView;
+        private HapRows.Channel item;
+        private int appliedSelected = -1;
+        private int appliedDetailColor = Integer.MIN_VALUE;
+        private int appliedBadgeBackground = Integer.MIN_VALUE;
+        private int appliedBadgeForeground = Integer.MIN_VALUE;
+
+        ChannelRow(int topMargin) {
+            row = new LinearLayout(HapConfigActivity.this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(10), dp(8), dp(10), dp(8));
-            row.setBackground(focusBackground(
-                    selected ? COLOR_BRAND_MUTED : COLOR_PANEL_SOFT,
-                    COLOR_SURFACE_FOCUSED,
-                    dp(10),
-                    dp(1),
-                    selected ? COLOR_BRAND : COLOR_STROKE
-            ));
+            row.setLayoutParams(matchWrapTop(topMargin));
             row.setClickable(true);
             row.setFocusable(true);
             row.setOnClickListener(v -> {
-                selectedChannelContentId = channel.contentId;
-                renderChannels();
-                checkChannel(channel.contentId, channel.name);
+                if (item != null) selectChannel(item);
             });
 
-            LinearLayout left = new LinearLayout(this);
+            LinearLayout left = new LinearLayout(HapConfigActivity.this);
             left.setOrientation(LinearLayout.VERTICAL);
             row.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-            TextView name = text(channel.name, 14, COLOR_TEXT_PRIMARY, Typeface.BOLD);
-            name.setSingleLine(true);
-            name.setEllipsize(TextUtils.TruncateAt.END);
-            left.addView(name, matchWrap());
+            nameView = text("", 14, COLOR_TEXT_PRIMARY, Typeface.BOLD);
+            nameView.setSingleLine(true);
+            nameView.setEllipsize(TextUtils.TruncateAt.END);
+            left.addView(nameView, matchWrap());
 
-            TextView content = text(channel.contentId, 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
-            content.setSingleLine(true);
-            content.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-            left.addView(content, matchWrap());
+            contentView = text("", 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+            contentView.setSingleLine(true);
+            contentView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+            left.addView(contentView, matchWrap());
 
-            if (result != null) {
-                TextView detail = text(peerDetailText(result), 12, peerColor(result), Typeface.NORMAL);
-                detail.setMaxLines(2);
-                detail.setEllipsize(TextUtils.TruncateAt.END);
-                left.addView(detail, matchWrap());
-                row.addView(pill(peerShortStatus(result), result.available ? COLOR_SUCCESS_MUTED : COLOR_SURFACE, result.available ? COLOR_SUCCESS : COLOR_TEXT_TERTIARY), wrapWrapLeft(8));
+            detailView = text("", 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+            detailView.setMaxLines(2);
+            detailView.setEllipsize(TextUtils.TruncateAt.END);
+            detailView.setVisibility(View.GONE);
+            left.addView(detailView, matchWrap());
+
+            badgeView = pill("", COLOR_SURFACE, COLOR_TEXT_TERTIARY);
+            badgeView.setVisibility(View.GONE);
+            row.addView(badgeView, wrapWrapLeft(8));
+        }
+
+        @Override
+        public View view() {
+            return row;
+        }
+
+        @Override
+        public void bind(HapRows.Channel next) {
+            item = next;
+
+            int wanted = next.selected ? 1 : 0;
+            if (appliedSelected != wanted) {
+                appliedSelected = wanted;
+                row.setBackground(focusBackground(
+                        next.selected ? COLOR_BRAND_MUTED : COLOR_PANEL_SOFT,
+                        COLOR_SURFACE_FOCUSED,
+                        dp(10),
+                        dp(1),
+                        next.selected ? COLOR_BRAND : COLOR_STROKE
+                ));
             }
 
-            channelRowsContainer.addView(row, matchWrapTop(channelRowsContainer.getChildCount() == 0 ? 0 : 8));
+            applyText(nameView, next.name);
+            applyText(contentView, next.contentId);
+
+            boolean hasResult = next.badge != null;
+            if (next.detail != null && appliedDetailColor != next.detailColor) {
+                appliedDetailColor = next.detailColor;
+                detailView.setTextColor(next.detailColor);
+            }
+            applyText(detailView, next.detail);
+            applyVisibility(detailView, next.detail != null);
+
+            if (hasResult) {
+                if (appliedBadgeBackground != next.badgeBackground) {
+                    appliedBadgeBackground = next.badgeBackground;
+                    badgeView.setBackground(roundRect(next.badgeBackground, dp(999), 0, 0));
+                }
+                if (appliedBadgeForeground != next.badgeForeground) {
+                    appliedBadgeForeground = next.badgeForeground;
+                    badgeView.setTextColor(next.badgeForeground);
+                }
+            }
+            applyText(badgeView, next.badge);
+            applyVisibility(badgeView, hasResult);
         }
+    }
+
+    /** Selecting a channel row marks it and checks its peers, exactly as the rebuilt rows did. */
+    private void selectChannel(HapRows.Channel channel) {
+        selectedChannelContentId = channel.contentId;
+        renderChannels();
+        checkChannel(channel.contentId, channel.name);
     }
 
     private void renderChannelFeedback(String message) {
@@ -2191,10 +2533,10 @@ public class HapConfigActivity extends Activity {
         }
 
         if (feedback == null || feedback.trim().isEmpty()) {
-            channelFeedbackView.setVisibility(View.GONE);
+            applyVisibility(channelFeedbackView, false);
         } else {
-            channelFeedbackView.setText(feedback);
-            channelFeedbackView.setVisibility(View.VISIBLE);
+            applyText(channelFeedbackView, feedback);
+            applyVisibility(channelFeedbackView, true);
         }
     }
 
@@ -2332,44 +2674,15 @@ public class HapConfigActivity extends Activity {
         }
     }
 
-    /** Builds the gateway row once, then only the value text is updated in place. */
+    /**
+     * Applies the gateway URL. The row is built with the panel and only re-labelled here: hiding it
+     * is a visibility change, never a removal, so the copy button keeps its identity (S7).
+     */
     private void applyIpfsGateway(String url) {
         String value = url == null ? "" : url;
-        if (value.isEmpty()) {
-            ipfsGatewayValue = "";
-            if (ipfsGatewayContainer.getChildCount() > 0) {
-                ipfsGatewayContainer.removeAllViews();
-                ipfsGatewayValueView = null;
-            }
-            return;
-        }
-
         ipfsGatewayValue = value;
-        if (ipfsGatewayValueView != null) {
-            if (!TextUtils.equals(value, ipfsGatewayValueView.getText())) {
-                ipfsGatewayValueView.setText(value);
-            }
-            return;
-        }
-
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-
-        row.addView(pill(getString(R.string.label_ipfs_gateway_url), COLOR_SURFACE, COLOR_TEXT_SECONDARY), wrapWrap());
-
-        TextView valueView = text(value, 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
-        valueView.setSingleLine(true);
-        valueView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        valueView.setPadding(dp(8), 0, dp(8), 0);
-        row.addView(valueView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        Button copy = smallButton(getString(R.string.button_copy));
-        copy.setOnClickListener(v -> copyToClipboard("HaP IPFS gateway", ipfsGatewayValue));
-        row.addView(copy, wrapWrap());
-
-        ipfsGatewayValueView = valueView;
-        ipfsGatewayContainer.addView(row, matchWrap());
+        applyText(ipfsGatewayValueView, value);
+        applyVisibility(ipfsGatewayRow, !value.isEmpty());
     }
 
     private void setSourceSelected(String sourceId, boolean selected) {
@@ -2412,7 +2725,7 @@ public class HapConfigActivity extends Activity {
         });
     }
 
-    private void editM3uSource(HapBridge.SourceInfo source) {
+    private void editM3uSource(HapRows.Source source) {
         editingM3uSourceId = source.id;
         sourceNameEdit.setText(source.label);
         sourceUrlEdit.setText(source.value);
@@ -2464,7 +2777,7 @@ public class HapConfigActivity extends Activity {
         });
     }
 
-    private void editCustomChannel(HapBridge.CustomChannelInfo channel) {
+    private void editCustomChannel(HapRows.CustomChannel channel) {
         customEditingIndex = channel.index;
         if (customNameEdit != null) customNameEdit.setText(channel.name);
         if (customContentIdEdit != null) customContentIdEdit.setText(channel.contentId);
@@ -2485,15 +2798,16 @@ public class HapConfigActivity extends Activity {
     }
 
     private void loadClients() {
-        clientsStatusView.setText(getString(R.string.message_loading_clients));
+        applyText(clientsStatusView, getString(R.string.message_loading_clients));
         workExecutor.execute(() -> {
             try {
                 List<HapBridge.ConnectedClientInfo> clients = HapBridge.connectedClients();
                 main(() -> renderClients(clients));
             } catch (Throwable error) {
                 main(() -> {
-                    clientsStatusView.setText(errorMessage(error));
-                    clientsContainer.removeAllViews();
+                    applyText(clientsStatusView, errorMessage(error));
+                    // The rows are stale, not reloading: drop the tail instead of rebuilding.
+                    clientList.clear();
                 });
             }
         });
@@ -3088,19 +3402,9 @@ public class HapConfigActivity extends Activity {
         int ipfsTextColor;
         String ipfsErrorText;
         String ipfsGatewayUrl;
-        List<EndpointModel> endpoints;
+        List<HapRows.Endpoint> endpoints;
         String logText;
         HapServiceStates services;
-    }
-
-    private static final class EndpointModel {
-        final String label;
-        final String url;
-
-        EndpointModel(String label, String url) {
-            this.label = label;
-            this.url = url;
-        }
     }
 
     private static final class PanelViews {
