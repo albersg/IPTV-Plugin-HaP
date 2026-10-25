@@ -33,6 +33,7 @@ final class HapSections {
      */
     enum Panel {
         HEADER,
+        DIAGNOSTICS,
         CHANNEL_STATUS,
         SOURCES,
         CUSTOM_CHANNELS,
@@ -53,7 +54,8 @@ final class HapSections {
     private static final List<Panel> SOURCES =
             Collections.unmodifiableList(Arrays.asList(Panel.SOURCES, Panel.CUSTOM_CHANNELS));
     private static final List<Panel> CONNECTIONS =
-            Collections.unmodifiableList(Arrays.asList(Panel.AIO, Panel.EXTERNAL_PLAYERS, Panel.CLIENTS));
+            Collections.unmodifiableList(Arrays.asList(
+                    Panel.AIO, Panel.EXTERNAL_PLAYERS, Panel.CLIENTS, Panel.DIAGNOSTICS));
     private static final List<Panel> SETTINGS =
             Collections.unmodifiableList(Arrays.asList(
                     Panel.IPFS,

@@ -19,6 +19,7 @@
     <string name="status_running_on">Arrancado en %1$s</string>
     <string name="status_running_on_lan">Arrancado en LAN:%1$d</string>
     <string name="status_stopping">Parando</string>
+    <string name="panel_diagnostics">Estado técnico</string>
     <string name="label_enable_hap">Activar HaP</string>
     <string name="label_aceserve">AceServe</string>
     <string name="label_proxy">HTTPAceProxy</string>

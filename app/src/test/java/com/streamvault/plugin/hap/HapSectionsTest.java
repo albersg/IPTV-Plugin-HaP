@@ -71,7 +71,8 @@ public final class HapSectionsTest {
                 Arrays.asList(
                         HapSections.Panel.AIO,
                         HapSections.Panel.EXTERNAL_PLAYERS,
-                        HapSections.Panel.CLIENTS
+                        HapSections.Panel.CLIENTS,
+                        HapSections.Panel.DIAGNOSTICS
                 ),
                 panels(HapSections.Section.CONEXIONES)
         );

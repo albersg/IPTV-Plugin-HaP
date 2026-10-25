@@ -373,9 +373,27 @@ public class HapConfigActivity extends Activity {
         navItems.clear();
         for (HapSections.Section section : HapSections.Section.values()) {
             TextView item = findViewById(navItemId(section));
+            item.setCompoundDrawablesWithIntrinsicBounds(navIconId(section), 0, 0, 0);
+            item.setCompoundDrawablePadding(dp(18));
             item.setContentDescription(getString(R.string.nav_item_description, item.getText()));
             item.setOnClickListener(v -> showSection(section, false));
             navItems.add(item);
+        }
+    }
+
+    private static int navIconId(HapSections.Section section) {
+        switch (section) {
+            case CANALES:
+                return R.drawable.ic_nav_channels;
+            case FUENTES:
+                return R.drawable.ic_nav_sources;
+            case CONEXIONES:
+                return R.drawable.ic_nav_connections;
+            case AJUSTES:
+                return R.drawable.ic_nav_settings;
+            case INICIO:
+            default:
+                return R.drawable.ic_nav_home;
         }
     }
 
@@ -444,6 +462,8 @@ public class HapConfigActivity extends Activity {
     /** Maps a panel of {@link HapSections} to its existing builder; nothing is re-implemented. */
     private View buildPanel(HapSections.Panel panel) {
         switch (panel) {
+            case DIAGNOSTICS:
+                return buildDiagnosticsPanel();
             case CHANNEL_STATUS:
                 return buildChannelStatusPanel();
             case SOURCES:
@@ -572,6 +592,13 @@ public class HapConfigActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
 
+    /**
+     * The home card's action: the switch that starts and stops HaP, plus the feedback that has to
+     * stay next to it. Everything diagnostic — the engine pills, the addresses, restart and
+     * prepare — moved to {@link #buildDiagnosticsPanel()}, because inside the status card it
+     * duplicated the plain-language state, truncated its own labels and pushed the primary action
+     * off the first screen.
+     */
     private View buildHeaderPanel() {
         boolean compact = isCompactWidth();
         PanelViews panel = panel(null, false, true);
@@ -586,43 +613,7 @@ public class HapConfigActivity extends Activity {
         left.setGravity(Gravity.CENTER_VERTICAL);
         row.addView(left, compact ? matchWrap() : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        LinearLayout titleRow = new LinearLayout(this);
-        titleRow.setOrientation(LinearLayout.HORIZONTAL);
-        titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        left.addView(titleRow, matchWrap());
-
-        titleRow.addView(text(getString(R.string.screen_title), 24, COLOR_TEXT_PRIMARY, Typeface.BOLD));
-        statePill = new Pill(pill(getString(R.string.status_stopped), COLOR_ERROR_MUTED, COLOR_ERROR));
-        titleRow.addView(statePill.view, wrapWrapLeft(10));
-        phasePill = new Pill(pill(getString(R.string.status_idle), COLOR_SURFACE, COLOR_TEXT_SECONDARY));
-        titleRow.addView(phasePill.view, wrapWrapLeft(8));
-
-        runtimePillsContainer = new LinearLayout(this);
-        runtimePillsContainer.setOrientation(LinearLayout.HORIZONTAL);
-        runtimePillsContainer.setGravity(Gravity.CENTER_VERTICAL);
-        runtimePillsContainer.setPadding(0, dp(10), 0, 0);
-        left.addView(runtimePillsContainer, matchWrap());
-
-        // Built once here and only re-labelled/re-coloured afterwards: rebuilding these pills on
-        // every refresh tick allocated a new TextView, layout and GradientDrawable per second.
-        aceServePill = new Pill(pill(
-                getString(R.string.label_aceserve) + " " + onlineLabel(false),
-                COLOR_ERROR_MUTED,
-                COLOR_ERROR
-        ));
-        runtimePillsContainer.addView(aceServePill.view, wrapWrap());
-        proxyPill = new Pill(pill(
-                getString(R.string.label_proxy) + " " + onlineLabel(false),
-                COLOR_ERROR_MUTED,
-                COLOR_ERROR
-        ));
-        runtimePillsContainer.addView(proxyPill.view, wrapWrapLeft(8));
-
-        runtimeView = text(HapBridge.LOCAL_AIO_URL, 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
-        runtimeView.setSingleLine(true);
-        runtimeView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        runtimeView.setPadding(0, dp(8), 0, 0);
-        left.addView(runtimeView, matchWrap());
+        left.addView(text(getString(R.string.label_enable_hap), 16, COLOR_TEXT_PRIMARY, Typeface.BOLD), matchWrap());
 
         errorView = text("", 13, COLOR_ERROR, Typeface.NORMAL);
         errorView.setPadding(0, dp(6), 0, 0);
@@ -645,10 +636,9 @@ public class HapConfigActivity extends Activity {
         switchRow.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
         actions.addView(switchRow, wrapWrap());
 
-        switchRow.addView(text(getString(R.string.label_enable_hap), 13, COLOR_TEXT_SECONDARY, Typeface.BOLD));
         enabledSwitch = new Switch(this);
         enabledSwitch.setPadding(dp(8), 0, 0, 0);
-        // The label sits next to the switch, so the control itself says what it does.
+        // The label sits beside the switch, so the control itself says what it does.
         enabledSwitch.setContentDescription(getString(R.string.hap_enable_switch_description));
         enabledSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
             if (suppressSwitchCallbacks) return;
@@ -657,11 +647,59 @@ public class HapConfigActivity extends Activity {
         busyControls.add(enabledSwitch);
         switchRow.addView(enabledSwitch, wrapWrap());
 
+        return panel.container;
+    }
+
+    /**
+     * The technical detail the home screen deliberately does not show: the engine and proxy pills,
+     * the addresses, and the restart and prepare actions. It lives in Conexiones, next to the other
+     * player-facing controls, so a normal user never meets it and an advanced one still finds it.
+     */
+    private View buildDiagnosticsPanel() {
+        PanelViews panel = panel(getString(R.string.panel_diagnostics), false, true);
+
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        panel.body.addView(titleRow, matchWrap());
+
+        statePill = new Pill(pill(getString(R.string.status_stopped), COLOR_ERROR_MUTED, COLOR_ERROR));
+        titleRow.addView(statePill.view, wrapWrap());
+        phasePill = new Pill(pill(getString(R.string.status_idle), COLOR_SURFACE, COLOR_TEXT_SECONDARY));
+        titleRow.addView(phasePill.view, wrapWrapLeft(8));
+
+        runtimePillsContainer = new LinearLayout(this);
+        runtimePillsContainer.setOrientation(LinearLayout.HORIZONTAL);
+        runtimePillsContainer.setGravity(Gravity.CENTER_VERTICAL);
+        runtimePillsContainer.setPadding(0, dp(10), 0, 0);
+        panel.body.addView(runtimePillsContainer, matchWrap());
+
+        // Built once here and only re-labelled/re-coloured afterwards: rebuilding these pills on
+        // every refresh tick allocated a new TextView, layout and GradientDrawable per second.
+        aceServePill = new Pill(pill(
+                getString(R.string.label_aceserve) + " " + onlineLabel(false),
+                COLOR_ERROR_MUTED,
+                COLOR_ERROR
+        ));
+        runtimePillsContainer.addView(aceServePill.view, wrapWrap());
+        proxyPill = new Pill(pill(
+                getString(R.string.label_proxy) + " " + onlineLabel(false),
+                COLOR_ERROR_MUTED,
+                COLOR_ERROR
+        ));
+        runtimePillsContainer.addView(proxyPill.view, wrapWrapLeft(8));
+
+        runtimeView = text(HapBridge.LOCAL_AIO_URL, 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+        runtimeView.setSingleLine(true);
+        runtimeView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+        runtimeView.setPadding(0, dp(8), 0, 0);
+        panel.body.addView(runtimeView, matchWrap());
+
         LinearLayout buttonRow = new LinearLayout(this);
         buttonRow.setOrientation(LinearLayout.HORIZONTAL);
-        buttonRow.setGravity(compact ? Gravity.START : Gravity.RIGHT);
+        buttonRow.setGravity(Gravity.START);
         buttonRow.setPadding(0, dp(10), 0, 0);
-        actions.addView(buttonRow, wrapWrap());
+        panel.body.addView(buttonRow, wrapWrap());
 
         Button restart = button(getString(R.string.button_restart_proxy));
         restart.setOnClickListener(v -> restartProxy());

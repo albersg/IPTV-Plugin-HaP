@@ -130,7 +130,6 @@ public final class HomeScreen {
         addCardText(
                 firstRunCard, R.string.first_run_card_title, R.string.first_run_card_subtitle);
         firstRunCard.setVisibility(View.GONE);
-        content.addView(firstRunCard, top(matchWrap(), R.dimen.hap_gap_block));
 
         // 2. The one dominant action: the largest, brightest element of the screen.
         LinearLayout cta = new LinearLayout(activity);
@@ -176,6 +175,9 @@ public final class HomeScreen {
         channelsParams.leftMargin = space(R.dimen.hap_gap_block);
         shortcuts.addView(channels, channelsParams);
         content.addView(shortcuts, top(matchWrap(), R.dimen.hap_gap_block));
+        // The offer sits after the primary action and the two shortcuts: on a fresh install it is
+        // useful, but it must never be the reason the main action falls below the fold.
+        content.addView(firstRunCard, top(matchWrap(), R.dimen.hap_gap_block));
 
         // 4. Service status: names and static details here, the state word from the snapshot.
         TextView servicesHeading = label(R.string.services_heading, R.style.TextAppearance_HaP_Subtitle);
