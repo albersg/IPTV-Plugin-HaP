@@ -3,7 +3,13 @@ package com.streamvault.plugin.hap;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ResolveInfo;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.OpenableColumns;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
@@ -52,6 +58,11 @@ import com.jopsis.httpaceserveproxy.update.UpdateConfig;
 import com.jopsis.httpaceserveproxy.update.UpdateDecision;
 
 import java.io.File;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -222,7 +233,13 @@ public class HapConfigActivity extends Activity {
     private EditText customNameEdit;
     private EditText customContentIdEdit;
 
+    private static final int REQUEST_PICK_DEVICE_LIST = 4201;
+
     private List<HapBridge.SourceInfo> currentSources = new ArrayList<>();
+    private LinearLayout deviceListsContainer;
+    private TextView deviceListsEmptyView;
+    private Button deviceImportButton;
+    private InPlaceList<DeviceListModel> deviceList;
     private List<HapBridge.CustomChannelInfo> currentCustomChannels = new ArrayList<>();
     private List<HapBridge.PluginChannelsInfo> channelPlugins = new ArrayList<>();
     private String editingM3uSourceId = "";
@@ -1145,6 +1162,41 @@ public class HapConfigActivity extends Activity {
         panel.body.addView(sourcesHintView, matchWrapTop(12));
         sourceList = new InPlaceList<>(sourcesListContainer, () ->
                 new SourceRow(sourcesListContainer.getChildCount() == 0 ? 0 : 8));
+
+        // Lists held on the device. On a television this is the only path that always works: the box
+        // ships no document picker, and the file managers that answer GET_CONTENT are optional
+        // installs. A file reaches this folder with adb push.
+        TextView deviceTitle = text(getString(R.string.section_device_lists), 16, COLOR_TEXT_PRIMARY, Typeface.BOLD);
+        deviceTitle.setPadding(0, dp(18), 0, 0);
+        panel.body.addView(deviceTitle, matchWrap());
+
+        File listsFolder = LocalListFiles.folder(this);
+        String folderPath = listsFolder == null
+                ? getString(R.string.status_device_lists_unavailable)
+                : listsFolder.getAbsolutePath();
+        TextView deviceHint = text(getString(R.string.message_device_lists_folder, folderPath), 12,
+                COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+        deviceHint.setPadding(0, dp(6), 0, 0);
+        panel.body.addView(deviceHint, matchWrap());
+
+        deviceImportButton = button(getString(R.string.button_import_file));
+        deviceImportButton.setOnClickListener(v -> pickLocalList());
+        deviceImportButton.setVisibility(canPickFile() ? View.VISIBLE : View.GONE);
+        LinearLayout importRow = new LinearLayout(this);
+        importRow.setOrientation(LinearLayout.HORIZONTAL);
+        importRow.setPadding(0, dp(10), 0, 0);
+        importRow.addView(deviceImportButton, wrapWrap());
+        panel.body.addView(importRow, matchWrap());
+
+        deviceListsContainer = new LinearLayout(this);
+        deviceListsContainer.setOrientation(LinearLayout.VERTICAL);
+        deviceListsContainer.setPadding(0, dp(10), 0, 0);
+        panel.body.addView(deviceListsContainer, matchWrap());
+        deviceListsEmptyView = text(getString(R.string.message_no_device_lists), 13, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+        deviceListsEmptyView.setVisibility(View.GONE);
+        panel.body.addView(deviceListsEmptyView, matchWrapTop(8));
+        deviceList = new InPlaceList<>(deviceListsContainer, () ->
+                new DeviceListRow(deviceListsContainer.getChildCount() == 0 ? 0 : 8));
 
         return panel.container;
     }
@@ -2397,6 +2449,144 @@ public class HapConfigActivity extends Activity {
      * it exists, so its checkbox, its edit/delete buttons and the focus inside the row are the same
      * objects on every update instead of eight fresh views per refresh.
      */
+    /**
+     * Lists the playlists this device already holds. A file whose source is registered shows the
+     * action that removes the source; the file itself is never deleted from here, so nothing the
+     * user pushed to the box disappears without them asking.
+     */
+    private void renderDeviceLists() {
+        if (deviceList == null) return;
+        List<DeviceListModel> rows = new ArrayList<>();
+        for (File file : LocalListFiles.scan(LocalListFiles.folder(this))) {
+            String value = LocalSourceFile.valueFor(file);
+            String sourceId = sourceIdForLocalValue(value);
+            String detail = LocalListFiles.describeSize(file.length());
+            if (sourceId != null) detail = detail + " \u00b7 " + getString(R.string.status_device_list_added);
+            rows.add(new DeviceListModel(file.getAbsolutePath(), file.getName(), detail, sourceId));
+        }
+        deviceList.apply(rows);
+        applyVisibility(deviceListsEmptyView, rows.isEmpty());
+        applyVisibility(deviceImportButton, canPickFile());
+    }
+
+    private String sourceIdForLocalValue(String value) {
+        for (HapBridge.SourceInfo source : currentSources) {
+            if (source.value != null && source.value.equals(value)) return source.id;
+        }
+        return null;
+    }
+
+    /**
+     * True when a real document picker answers GET_CONTENT. Android TV ships a stub for documents
+     * that only reports the feature is unsupported, so its package never counts as a picker.
+     */
+    private boolean canPickFile() {
+        ResolveInfo info = getPackageManager().resolveActivity(pickListIntent(), 0);
+        return info != null
+                && info.activityInfo != null
+                && !info.activityInfo.packageName.startsWith("com.android.tv.frameworkpackagestubs");
+    }
+
+    private Intent pickListIntent() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        return intent;
+    }
+
+    private void pickLocalList() {
+        try {
+            startActivityForResult(pickListIntent(), REQUEST_PICK_DEVICE_LIST);
+        } catch (ActivityNotFoundException e) {
+            showSourceFeedback(getString(R.string.error_no_file_picker), COLOR_ERROR);
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_PICK_DEVICE_LIST || resultCode != RESULT_OK || data == null) return;
+        Uri uri = data.getData();
+        if (uri != null) copyPickedList(uri);
+    }
+
+    /** Copies the picked file into the app's folder, then registers it as a source. */
+    private void copyPickedList(Uri uri) {
+        File folder = LocalListFiles.folder(this);
+        if (folder == null) {
+            showSourceFeedback(getString(R.string.status_device_lists_unavailable), COLOR_ERROR);
+            return;
+        }
+        showMessage(getString(R.string.message_importing_file));
+        showSourceFeedback(getString(R.string.message_importing_file), COLOR_BRAND);
+        workExecutor.execute(() -> {
+            String copiedName = null;
+            String failure = null;
+            try (InputStream input = getContentResolver().openInputStream(uri)) {
+                if (input == null) throw new IOException("empty stream");
+                File target = new File(folder, LocalListFiles.uniqueName(folder, queryDisplayName(uri)));
+                copyPickedStream(input, target);
+                copiedName = target.getName();
+            } catch (Exception e) {
+                failure = errorMessage(e);
+            }
+            final String name = copiedName;
+            final String error = failure;
+            main(() -> {
+                if (error != null) {
+                    showMessage(error);
+                    showSourceFeedback(error, COLOR_ERROR);
+                    return;
+                }
+                String value = LocalSourceFile.valueFor(new File(folder, name));
+                HapBridge.SaveResult result =
+                        HapBridge.saveM3uSource(this, "", LocalSourceFile.displayName(value), value);
+                showMessage(result.message);
+                showSourceFeedback(result.message, result.success ? COLOR_SUCCESS : COLOR_ERROR);
+                if (result.success) refreshConfigState();
+            });
+        });
+    }
+
+    private String queryDisplayName(Uri uri) {
+        try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (index >= 0) {
+                    String name = cursor.getString(index);
+                    if (name != null && !name.trim().isEmpty()) return name;
+                }
+            }
+        } catch (Exception ignored) {
+            // A provider that cannot answer the query still has a path segment to fall back on.
+        }
+        String fallback = uri.getLastPathSegment();
+        return fallback == null || fallback.trim().isEmpty() ? "lista.m3u" : fallback;
+    }
+
+    private void copyPickedStream(InputStream input, File target) throws IOException {
+        boolean complete = false;
+        try (OutputStream output = new FileOutputStream(target)) {
+            byte[] buffer = new byte[8192];
+            long total = 0;
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                total += read;
+                if (total > LocalSourceFile.MAX_BYTES) {
+                    throw new IOException(getString(R.string.error_source_local_too_large,
+                            LocalSourceFile.MAX_BYTES / (1024 * 1024)));
+                }
+                output.write(buffer, 0, read);
+            }
+            complete = true;
+        } finally {
+            // A refused copy must not leave half a playlist behind for the next scan to offer.
+            if (!complete && target.exists() && !target.delete()) {
+                showMessage(getString(R.string.error_device_list_cleanup, target.getName()));
+            }
+        }
+    }
+
     private void renderSources() {
         boolean hasM3uSources = false;
         List<HapRows.Source> rows = new ArrayList<>(currentSources.size() + 1);
@@ -2410,6 +2600,7 @@ public class HapConfigActivity extends Activity {
 
         applyVisibility(sourcesHintView, !hasM3uSources);
         sourceList.apply(rows);
+        renderDeviceLists();
 
         if (custom != null) {
             // The custom channel list has its own panel in Fuentes now, so this only refreshes
@@ -3771,6 +3962,97 @@ public class HapConfigActivity extends Activity {
         HapServiceStates services;
         /** Real connected-client count, or -1 when the runtime did not answer (M4, S4). */
         int connectedClients = -1;
+    }
+
+    /** One playlist file found in the app's lists folder. */
+    private static final class DeviceListModel {
+        final String path;
+        final String name;
+        final String detail;
+        /** The registered source for this file, or null when it is not a source yet. */
+        final String sourceId;
+
+        DeviceListModel(String path, String name, String detail, String sourceId) {
+            this.path = path;
+            this.name = name;
+            this.detail = detail;
+            this.sourceId = sourceId;
+        }
+    }
+
+    /** A device playlist: its name, its size and the one action it offers. */
+    private final class DeviceListRow implements InPlaceList.Row<DeviceListModel> {
+
+        private final LinearLayout row;
+        private final TextView nameView;
+        private final TextView detailView;
+        private final Button action;
+        private DeviceListModel item;
+
+        DeviceListRow(int topMargin) {
+            row = new LinearLayout(HapConfigActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setBackground(roundRect(COLOR_PANEL_SOFT, dp(10), 0, 0));
+            row.setPadding(dp(10), dp(10), dp(10), dp(10));
+            LinearLayout.LayoutParams params = matchWrap();
+            params.topMargin = topMargin;
+            row.setLayoutParams(params);
+
+            LinearLayout texts = new LinearLayout(HapConfigActivity.this);
+            texts.setOrientation(LinearLayout.VERTICAL);
+            row.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            nameView = text("", 14, COLOR_TEXT_PRIMARY, Typeface.BOLD);
+            nameView.setSingleLine(true);
+            nameView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+            texts.addView(nameView, matchWrap());
+
+            detailView = text("", 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+            detailView.setPadding(0, dp(2), 0, 0);
+            texts.addView(detailView, matchWrap());
+
+            action = button("");
+            action.setOnClickListener(v -> toggle());
+            row.addView(action, wrapWrapLeft(10));
+        }
+
+        @Override
+        public View view() {
+            return row;
+        }
+
+        @Override
+        public void bind(DeviceListModel next) {
+            item = next;
+            applyText(nameView, next.name);
+            applyText(detailView, next.detail);
+            applyText(action, next.sourceId == null
+                    ? getString(R.string.button_add_to_sources)
+                    : getString(R.string.button_remove_from_sources));
+        }
+
+        private void applyText(TextView view, String value) {
+            if (!value.contentEquals(view.getText())) view.setText(value);
+        }
+
+        private void toggle() {
+            DeviceListModel target = item;
+            if (target == null) return;
+            boolean adding = target.sourceId == null;
+            showMessage(getString(adding ? R.string.message_adding_device_list : R.string.message_removing_device_list));
+            workExecutor.execute(() -> {
+                HapBridge.SaveResult result = adding
+                        ? HapBridge.saveM3uSource(HapConfigActivity.this, "", target.name,
+                                LocalSourceFile.valueFor(new File(target.path)))
+                        : HapBridge.deleteM3uSource(HapConfigActivity.this, target.sourceId);
+                main(() -> {
+                    showMessage(result.message);
+                    showSourceFeedback(result.message, result.success ? COLOR_SUCCESS : COLOR_ERROR);
+                    if (result.success) refreshConfigState();
+                });
+            });
+        }
     }
 
     private static final class PanelViews {

@@ -391,8 +391,8 @@ protected:
                 // makes a local list behave exactly like a remote one.
                 std::string body;
                 bool ace_api_source = false;
-                if (is_local_source(source.url)) {
-                    body = read_local_source(local_source_path(source.url));
+                if (httpaceproxy::is_local_source(source.url)) {
+                    body = httpaceproxy::read_local_source(httpaceproxy::local_source_path(source.url));
                 } else {
                     body = http_client_.get(source.url, {{"User-Agent", kBrowserUserAgent}}, 60, true).body;
                     ace_api_source = is_acestream_api_url(source.url);
