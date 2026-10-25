@@ -118,3 +118,36 @@ Sun Oct 25 09:00:00 CET 2026 | M+ Deportes 4                 | canales=2 | null
 No medido aquí: el mismo recorrido **en la caja**. Esta medición es de escritorio; el APK de debug no se
 instaló sobre el de release porque llevan firmas distintas y desinstalar habría borrado las fuentes del
 usuario. Queda pendiente medirlo en el dispositivo.
+
+## El mismo recorrido, ahora en la caja — y lo que reveló
+
+APK de debug firmado con la clave de release (`b9f4146a…`) para poder instalarlo encima sin perder las
+fuentes, `am start … --es op guide`, MiTV-AFMU0:
+
+```
+guide bytes=4550534 channels=642 programmes=4485 playlistNames=390
+matched=93 events=0 parseMs=96783 matchMs=12628 playlistMs=331 totalMs=109744
+```
+
+| Medida | Escritorio | Caja | Lectura |
+| --- | --- | --- | --- |
+Descarga + parseo de la guía | 766 ms | **96.783 ms** | incluye la descarga de 34,7 MB (4,5 MB comprimidos) |
+Emparejar 390 canales con 642 de guía | 319 ms | **12.628 ms** | **39× más lento, y demasiado para una pantalla** |
+Canales emparejados | 93/388 | 93/390 | coincide |
+Programas retenidos | 4.486 | 4.485 | coincide |
+
+**Dos defectos que solo aparecen aquí:**
+
+1. **Traer la guía tarda ~97 s en el dispositivo.** Ninguna pantalla puede esperar eso: la guía tiene que
+   descargarse una vez, guardarse en disco y refrescarse en segundo plano. Sin caché, la función de eventos
+   no es usable.
+2. **El emparejamiento tarda 12,6 s.** 250.000 comparaciones de nombre no deberían costar eso, lo que
+   apunta a normalizar las mismas cadenas una y otra vez dentro del bucle. Es corregible precalculando las
+   formas normalizadas una sola vez, y hay que corregirlo antes de la pantalla: 12 s por refresco se
+   percibe como que la app se ha colgado.
+
+Y una cifra que **no** vale: `events=0` es un defecto de la herramienta de medida —la op de debug pasa un
+mapa vacío a `EventCatalog`— no del catálogo, que en escritorio produjo 43 eventos. Queda como prueba
+pendiente hasta corregir la op.
+
+`heapUsedMb` tampoco se registra como buena: mide el montón en el instante final, no el pico.
