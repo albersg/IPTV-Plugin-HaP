@@ -753,6 +753,10 @@ public class HapConfigActivity extends Activity {
 
         // Opening the events section loads what is on, if it is not on screen already. It has to happen
         // here rather than when the panel was built, because every section is built at startup.
+        // The device list is scanned when this section is opened, not once at startup: a playlist copied
+        // into the folder while the app runs was invisible until the app was restarted.
+        if (section == HapSections.Section.FUENTES && deviceList != null) renderDeviceLists();
+
         if (section == HapSections.Section.EVENTOS && eventRefreshButton != null
                 && currentEvents.isEmpty() && eventRefreshButton.isEnabled()) {
             eventRefreshButton.performClick();
@@ -2819,11 +2823,6 @@ public class HapConfigActivity extends Activity {
         }
     }
 
-    /**
-     * Applies the M3U source rows. The set is effectively fixed-key: a source keeps its index while
-     * it exists, so its checkbox, its edit/delete buttons and the focus inside the row are the same
-     * objects on every update instead of eight fresh views per refresh.
-     */
     /**
      * Lists the playlists this device already holds. A file whose source is registered shows the
      * action that removes the source; the file itself is never deleted from here, so nothing the
