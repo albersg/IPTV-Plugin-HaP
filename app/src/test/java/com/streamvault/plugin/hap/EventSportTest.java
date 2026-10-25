@@ -50,6 +50,46 @@ public class EventSportTest {
     }
 
     @Test
+    public void aNamedSportBeatsAGenericWordThatComesFirst() {
+        // Both of these were on screen classified as football, which is what this pins.
+        assertEquals(EventSport.Kind.BALONCESTO,
+                EventSport.classify("DIRECTO Jornada 5: Força Lleida - Real Madrid T26/27 · Liga Endesa"));
+        assertEquals(EventSport.Kind.MOTOR,
+                EventSport.classify("DIRECTO Previo Carrera T2026 · Mundial F1 - GP de Estados Unidos"));
+    }
+
+    @Test
+    public void aGenericWordStillClassifiesWhenNothingElseDoes() {
+        // The match the request named: no competition in the title, but a jornada is football here.
+        assertEquals(EventSport.Kind.FUTBOL, EventSport.classify("Jornada 10: Barcelona - Real Madrid"));
+    }
+
+    @Test
+    public void mundialAloneNoLongerMeansFootball() {
+        // It named F1 and basketball as often as football, so it is no longer a football keyword. The
+        // sport is still recognised, just not as football.
+        assertEquals(EventSport.Kind.OTROS, EventSport.classify("Mundial de atletismo"));
+    }
+
+    @Test
+    public void sportsWithoutTheirOwnFilterGoToOtrosRatherThanAWrongOne() {
+        // Both were on screen classified as football because of the word "jornada".
+        assertEquals(EventSport.Kind.OTROS,
+                EventSport.classify("División de Honor de rugby T26/27 · Jornada 4: Liceo Francés - CRC"));
+        assertEquals(EventSport.Kind.OTROS,
+                EventSport.classify("Golf: Open de España · Jornada 3"));
+        assertEquals(EventSport.Kind.FUTBOL,
+                EventSport.classify("NFL: Baltimore Ravens - Cincinnati Bengals"));
+    }
+
+    @Test
+    public void aLongerNameBeatsAWordItContains() {
+        // "Premier Padel" was reading as football because "premier" is a football word.
+        assertEquals(EventSport.Kind.OTROS,
+                EventSport.classify("Premier Padel. Milán T2026 · Final Femenina"));
+    }
+
+    @Test
     public void everyKindHasALabelForTheFilter() {
         for (EventSport.Kind kind : EventSport.Kind.values()) {
             org.junit.Assert.assertFalse(kind.label().trim().isEmpty());

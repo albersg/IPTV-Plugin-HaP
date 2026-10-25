@@ -37,20 +37,26 @@ public final class EventSport {
         }
     }
 
+    /** Sports the filter does not break out: they belong under "Otros", not under a wrong one. */
+    private static final String[] OTHER_SPORTS = {
+            "rugby", "balonmano", "hockey", "golf", "atletismo", "boxeo", "premier padel", "padel",
+            "cricket", "béisbol",
+            "beisbol", "voleibol", "voley", "waterpolo"
+    };
+
     private static final Map<Kind, String[]> KEYWORDS = new LinkedHashMap<>();
 
     static {
         KEYWORDS.put(Kind.FUTBOL, new String[]{
                 "futbol", "fútbol", "laliga", "liga", "champions", "copa", "uefa", "europa league",
-                "mundial", "soccer", "premier", "serie a", "bundesliga", "ligue 1", "clasico", "derbi",
-                "jornada"
+                "soccer", "premier", "serie a", "bundesliga", "ligue 1", "clasico", "derbi", "nfl"
         });
         KEYWORDS.put(Kind.BALONCESTO, new String[]{
-                "baloncesto", "basket", "nba", "euroliga", "acb", "eurobasket", "wnba"
+                "baloncesto", "basket", "nba", "euroliga", "acb", "eurobasket", "wnba", "liga endesa"
         });
         KEYWORDS.put(Kind.MOTOR, new String[]{
                 "motogp", "moto2", "moto3", "formula 1", "formula e", "f1", "f2", "f3",
-                "grand prix", "rally", "dakar", "nascar", "indycar"
+                "grand prix", "gran premio", "rally", "dakar", "nascar", "indycar", "gp"
         });
         KEYWORDS.put(Kind.TENIS, new String[]{
                 "tenis", "tennis", "atp", "wta", "wimbledon", "roland garros", "us open", "australian open"
@@ -60,7 +66,25 @@ public final class EventSport {
         });
     }
 
+    /**
+     * Words that name a broadcast rather than a sport. "Jornada" appears in football, basketball and
+     * handball alike, so it cannot win over a sport that is actually named - but it is better than
+     * nothing when nothing else in the title is.
+     *
+     * <p>This exists because the screen showed the failure: "Jornada 5 - Liga Endesa" came out as football
+     * (jornada came first) and "Mundial F1 - GP de Estados Unidos" too (mundial came first).
+     */
+    private static final Map<String, Kind> GENERIC = new LinkedHashMap<>();
+
+    static {
+        GENERIC.put("jornada", Kind.FUTBOL);
+    }
+
     private EventSport() {
+    }
+
+    static {
+        KEYWORDS.put(Kind.OTROS, OTHER_SPORTS);
     }
 
     /**
@@ -72,20 +96,32 @@ public final class EventSport {
         if (normalized.isEmpty()) return null;
         String haystack = " " + normalized + " ";
 
-        // The earliest keyword wins, not the first kind in the table: "Euroliga · Jornada 12" says
-        // euroliga at position one and jornada later, and it is basketball, not football.
+        // The most specific keyword wins, and position only breaks ties. Two corrections came from
+        // watching the screen: "Euroliga - Jornada 12" was reading as football because a table order put
+        // football first, and "Liga Endesa" was too, because the shorter "liga" matched earlier in the
+        // string than the longer "liga endesa".
         Kind best = null;
+        int bestLength = -1;
         int bestAt = Integer.MAX_VALUE;
         for (Map.Entry<Kind, String[]> entry : KEYWORDS.entrySet()) {
             for (String keyword : entry.getValue()) {
-                int at = haystack.indexOf(" " + squash(keyword) + " ");
-                if (at >= 0 && at < bestAt) {
+                String needle = squash(keyword);
+                int at = haystack.indexOf(" " + needle + " ");
+                if (at < 0) continue;
+                int length = needle.length();
+                if (length > bestLength || (length == bestLength && at < bestAt)) {
+                    bestLength = length;
                     bestAt = at;
                     best = entry.getKey();
                 }
             }
         }
         if (best != null) return best;
+
+        // Nothing specific named: a generic word may still say what it is.
+        for (Map.Entry<String, Kind> entry : GENERIC.entrySet()) {
+            if (haystack.contains(" " + squash(entry.getKey()) + " ")) return entry.getValue();
+        }
 
         // Two named sides and no competition: a sporting event, but nothing says which sport.
         if (haystack.contains(" vs ") || haystack.contains(" contra ")) return Kind.OTROS;
