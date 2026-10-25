@@ -24,7 +24,8 @@
 ## Tasks
 
 - **T1 — `ChannelGuideMatcher`** con las cuatro capas y tests puros. Sin red, sin Android. **(hecho)**
-- **T2 — `EpgWindow`**: parseo en streaming del XMLTV, ventana temporal y caché en disco.
+- **T2 — `EpgWindow`**: parseo en streaming del XMLTV y ventana temporal. **(hecho)** La caché en
+  disco queda para T3.
 - **T3 — Pantalla de Eventos**: agrupación por título, número de canales, progreso.
 - **T4 — Evento → filtrar → sonda ligera → orden por calidad → reproducir.**
 - **T5 — Alias editables** y sugerencias a partir de los canales sin casar.
