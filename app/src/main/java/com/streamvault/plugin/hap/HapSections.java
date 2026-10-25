@@ -28,6 +28,22 @@ final class HapSections {
     }
 
     /**
+     * The four entries of the phone bottom bar, left to right, exactly as the mockup draws them.
+     *
+     * <p>They are not a second list of sections: three of them open a {@link Section} directly and
+     * {@link #MAS} only opens the menu of {@link #moreMenu()}. Adding a section to {@link Section}
+     * without deciding where a phone reaches it therefore breaks
+     * {@code HapSectionsTest#everySectionIsReachableFromThePhoneShell}, on the JVM, instead of
+     * silently leaving a phone user without that section (S5, S6).
+     */
+    enum MobileEntry {
+        INICIO,
+        LISTAS,
+        CANALES,
+        MAS
+    }
+
+    /**
      * One entry per panel builder the activity already had. {@code HEADER} is the status panel
      * that owns the start/stop switch; on the new shell it lives inside the home status card.
      */
@@ -67,6 +83,14 @@ final class HapSections {
                     Panel.UPDATE_SETTINGS
             ));
 
+    /**
+     * The two sections the phone's fourth entry offers, in rail order. The phone bar has room for
+     * four entries and the design keeps five sections, so {@code Más} is the door to these two and
+     * nothing else: the television keeps all five as direct entries (S1, S5).
+     */
+    private static final List<Section> MORE_MENU =
+            Collections.unmodifiableList(Arrays.asList(Section.CONEXIONES, Section.AJUSTES));
+
     private HapSections() {
     }
 
@@ -95,5 +119,47 @@ final class HapSections {
     static Section backTarget(Section current) {
         if (current == null || current == Section.INICIO) return null;
         return Section.INICIO;
+    }
+
+    /**
+     * The section a bottom-bar entry opens, or {@code null} for {@link MobileEntry#MAS}, which
+     * opens {@link #moreMenu()} instead of navigating.
+     */
+    static Section mobileSection(MobileEntry entry) {
+        switch (entry) {
+            case INICIO:
+                return Section.INICIO;
+            case LISTAS:
+                return Section.FUENTES;
+            case CANALES:
+                return Section.CANALES;
+            case MAS:
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * The bottom-bar entry that owns {@code section}: this is what the phone shell highlights when
+     * the section is on screen, so {@code Conexiones} and {@code Ajustes} light up {@code Más}.
+     */
+    static MobileEntry mobileEntry(Section section) {
+        switch (section) {
+            case FUENTES:
+                return MobileEntry.LISTAS;
+            case CANALES:
+                return MobileEntry.CANALES;
+            case CONEXIONES:
+            case AJUSTES:
+                return MobileEntry.MAS;
+            case INICIO:
+            default:
+                return MobileEntry.INICIO;
+        }
+    }
+
+    /** The sections the phone's {@code Más} entry offers, in rail order. Immutable. */
+    static List<Section> moreMenu() {
+        return MORE_MENU;
     }
 }

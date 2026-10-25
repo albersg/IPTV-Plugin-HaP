@@ -1,6 +1,7 @@
 package com.streamvault.plugin.hap;
 
 import android.app.Activity;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -47,6 +48,8 @@ public final class HomeScreen {
 
     private final Activity activity;
     private final LinearLayout root;
+    /** Which shell this instance is being built for: the phone card carries two extras (S2, S4). */
+    private final boolean phone;
 
     /**
      * The first-run card. Created once and hidden, so offering it and taking the offer away is a
@@ -59,6 +62,17 @@ public final class HomeScreen {
     private final TextView serverReadyView;
     private final TextView serverBodyView;
     private final View serverDotView;
+    /**
+     * The phone's "Online" pill, its rounded background and the line with the real number of
+     * connected clients. All three are {@code null} on the television shell: the box's status card
+     * is the one that was verified on hardware and it does not change (S1).
+     */
+    private final TextView serverPillView;
+    private final GradientDrawable serverPillShape;
+    private final TextView clientsView;
+
+    /** What the client line currently says, so an unchanged tick writes nothing (S7). */
+    private int appliedClients = Integer.MIN_VALUE;
     private final TextView aceServeStateView;
     private final TextView proxyStateView;
     private final TextView ipfsStateView;
@@ -74,9 +88,15 @@ public final class HomeScreen {
      * @param statusCardBody the existing header panel, with the start/stop switch and its
      *                       actions; it keeps its behaviour and only loses its own card chrome
      *                       because it now lives inside the status card
+     * @param phone          build the phone arrangement of the same screen (M4): the "Online" pill
+     *                       and the connected-client line are the two things the mockup adds, and
+     *                       the services stack instead of sitting side by side on a narrow screen.
+     *                       The state words, the cards and the actions are the same objects, so the
+     *                       runtime logic is written once.
      */
-    public HomeScreen(Activity activity, Listener listener, View statusCardBody) {
+    public HomeScreen(Activity activity, Listener listener, View statusCardBody, boolean phone) {
         this.activity = activity;
+        this.phone = phone;
 
         // The page title and its subtitle sit outside the scrolling area. Inside it, focusing a card
         // below scrolled the title to the very edge and sliced its glyphs in half, which reads as a
@@ -107,6 +127,22 @@ public final class HomeScreen {
         serverHeadingView = label(0, R.style.TextAppearance_HaP_Title);
         serverHeadingView.setPadding(space(R.dimen.hap_gap_row), 0, 0, 0);
         headingRow.addView(serverHeadingView, weight(1f, 0));
+
+        // The state pill of the phone mockup, at the right of the heading, where a thumb-driven
+        // screen reads it first. The television card keeps its dot and heading alone.
+        if (phone) {
+            serverPillShape = new GradientDrawable();
+            serverPillShape.setShape(GradientDrawable.RECTANGLE);
+            serverPillShape.setCornerRadius(space(R.dimen.hap_nav_radius));
+            serverPillView = label(0, R.style.TextAppearance_HaP_Caption);
+            int horizontal = space(R.dimen.hap_gap_row);
+            serverPillView.setPadding(horizontal, horizontal / 2, horizontal, horizontal / 2);
+            serverPillView.setBackground(serverPillShape);
+            headingRow.addView(serverPillView, wrapWrap());
+        } else {
+            serverPillShape = null;
+            serverPillView = null;
+        }
         statusCard.addView(headingRow, matchWrap());
 
         serverReadyView = label(0, R.style.TextAppearance_HaP_Body);
@@ -117,6 +153,17 @@ public final class HomeScreen {
         serverBodyView.setTextColor(color(R.color.hap_text_muted));
         serverBodyView.setPadding(0, space(R.dimen.hap_gap_row), 0, 0);
         statusCard.addView(serverBodyView, matchWrap());
+
+        // S4: the only second row the mockup shows that the runtime can actually answer. It is
+        // hidden until a real count arrives, and it never exists on the television shell.
+        if (phone) {
+            clientsView = label(0, R.style.TextAppearance_HaP_Caption);
+            clientsView.setPadding(0, space(R.dimen.hap_gap_row), 0, 0);
+            clientsView.setVisibility(View.GONE);
+            statusCard.addView(clientsView, matchWrap());
+        } else {
+            clientsView = null;
+        }
 
         // The header panel brought its own card chrome; the status card is the card now.
         statusCardBody.setBackgroundResource(0);
@@ -190,8 +237,10 @@ public final class HomeScreen {
 
         LinearLayout servicesCard = card(false, 0);
         // The approved layout sets the three services side by side, divided by hairlines,
-        // rather than stacked: the whole row is readable in one glance from the sofa.
-        LinearLayout servicesRow = row(Gravity.TOP);
+        // rather than stacked: the whole row is readable in one glance from the sofa. On a phone
+        // the same three entries stack, because three columns on a 360dp screen truncate every
+        // label; the state words and the detail lines are the same.
+        LinearLayout servicesRow = phone ? column() : row(Gravity.TOP);
         aceServeStateView = addServiceRow(
                 servicesRow, R.string.label_aceserve, R.string.service_aceserve_detail);
         proxyStateView = addServiceRow(
@@ -239,6 +288,7 @@ public final class HomeScreen {
             serverReadyView.setText(serverReady(states.server));
             serverBodyView.setText(serverBody(states.server));
             serverDotView.setBackgroundResource(serverDot(states.server));
+            applyServerPill(states.server);
         }
         if (appliedAceServe != states.aceServe) {
             appliedAceServe = states.aceServe;
@@ -268,6 +318,66 @@ public final class HomeScreen {
         view.setText(stateWord(state));
         view.setTextColor(color(stateColor(state)));
         view.setCompoundDrawablesWithIntrinsicBounds(stateDot(state), 0, 0, 0);
+    }
+
+    /**
+     * Shows how many clients HaP is really serving (S4).
+     *
+     * <p>The count comes from {@code HapBridge}, which is the only place that knows it; a negative
+     * value means the runtime did not answer, and then the line is hidden instead of showing a zero
+     * the screen cannot stand behind. Nothing is written when the number did not change, so the
+     * 1 Hz refresh does not touch this view at all while it stays the same.
+     */
+    void applyConnectedClients(int clients) {
+        if (clientsView == null || appliedClients == clients) return;
+        appliedClients = clients;
+        if (clients < 0) {
+            if (clientsView.getVisibility() != View.GONE) clientsView.setVisibility(View.GONE);
+            return;
+        }
+        clientsView.setText(activity.getString(R.string.home_clients_connected, clients));
+        if (clientsView.getVisibility() != View.VISIBLE) clientsView.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * The phone's state pill: the same word the dot and the heading already carry, in the shape of
+     * the mockup's "Online" badge. It reads the server state, so it can never disagree with them.
+     */
+    private void applyServerPill(HapServiceStates.ServerState state) {
+        if (serverPillView == null) return;
+        serverPillView.setText(serverPillWord(state));
+        int accent = color(serverPillColor(state));
+        serverPillView.setTextColor(accent);
+        // The muted fill of the palette: the state colour at the same 20% the other pills use.
+        serverPillShape.setColor((accent & 0x00FFFFFF) | 0x33000000);
+    }
+
+    private static int serverPillWord(HapServiceStates.ServerState state) {
+        switch (state) {
+            case RUNNING:
+                return R.string.home_status_pill_online;
+            case STARTING:
+                return R.string.service_state_starting;
+            case ERROR:
+                return R.string.service_state_error;
+            case STOPPED:
+            default:
+                return R.string.service_state_stopped;
+        }
+    }
+
+    private static int serverPillColor(HapServiceStates.ServerState state) {
+        switch (state) {
+            case RUNNING:
+                return R.color.hap_success;
+            case STARTING:
+                return R.color.hap_warning;
+            case ERROR:
+                return R.color.hap_error;
+            case STOPPED:
+            default:
+                return R.color.hap_text_muted;
+        }
     }
 
     /** The dot beside a service state, so the word is not the only signal. */
@@ -387,7 +497,9 @@ public final class HomeScreen {
      * detail. Columns sit side by side, separated by a hairline.
      */
     private TextView addServiceRow(LinearLayout card, int nameRes, int detailRes) {
-        if (card.getChildCount() > 0) card.addView(verticalDivider());
+        if (card.getChildCount() > 0) {
+            card.addView(phone ? horizontalDivider() : verticalDivider());
+        }
 
         LinearLayout column = column();
         column.addView(label(nameRes, R.style.TextAppearance_HaP_Body), matchWrap());
@@ -403,7 +515,7 @@ public final class HomeScreen {
         detail.setPadding(0, space(R.dimen.hap_gap_row), 0, 0);
         column.addView(detail, matchWrap());
 
-        card.addView(column, weight(1f, 0));
+        card.addView(column, phone ? matchWrap() : weight(1f, 0));
         return state;
     }
 
@@ -417,6 +529,20 @@ public final class HomeScreen {
                 new LinearLayout.LayoutParams(width, LinearLayout.LayoutParams.MATCH_PARENT);
         int gap = space(R.dimen.hap_gap_block);
         params.setMargins(gap, 0, gap, 0);
+        divider.setLayoutParams(params);
+        return divider;
+    }
+
+    /** The hairline between two stacked service entries of the phone card. */
+    private View horizontalDivider() {
+        View divider = new View(activity);
+        divider.setBackgroundColor(color(R.color.hap_hairline));
+        int height = Math.max(1, Math.round(
+                activity.getResources().getDisplayMetrics().density));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, height);
+        int gap = space(R.dimen.hap_gap_row);
+        params.setMargins(0, gap, 0, gap);
         divider.setLayoutParams(params);
         return divider;
     }

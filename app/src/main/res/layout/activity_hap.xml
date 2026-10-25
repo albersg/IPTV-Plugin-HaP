@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    HaP shell: a fixed navigation rail on the left, the current section on the right, and the
-    persistent key-hint footer of the design.
+    HaP phone shell (M2): a brand bar with the two actions of the mockup on top, the current
+    section in the middle, and a four-entry bottom bar.
 
-    The rail is the only place that knows the five sections; the content FrameLayout is filled
-    once by HapConfigActivity with one pre-built view per section, and navigating only toggles
-    visibility, so no section is ever rebuilt or loses its scroll position.
+    This is the default layout, so it is what a phone inflates. The television shell is the same
+    file name in res/layout-w600dp/, which is where it must stay: the Xiaomi box reports
+    960x540dp, so the w600dp qualifier (available width) selects the television shell there and
+    this one everywhere narrower (S1).
+
+    The ids are the ones the activity already binds, so bindNavigation keeps working on both
+    shells: the five section entries (three in the bar, two inside the "Más" menu) keep their
+    names, hap_nav_rail is still the container the D-pad navigator treats as one graph, and
+    hap_section_container is still the only child the sections are put into. Two ids are new:
+    hap_nav_more (the fourth bar entry, which opens the menu) and the two top-bar actions.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -15,102 +22,53 @@
     android:orientation="vertical"
     android:paddingStart="@dimen/hap_screen_padding_horizontal"
     android:paddingTop="@dimen/hap_screen_padding_vertical"
-    android:paddingEnd="@dimen/hap_screen_padding_horizontal"
-    android:paddingBottom="@dimen/hap_screen_padding_vertical">
+    android:paddingEnd="@dimen/hap_screen_padding_horizontal">
 
+    <!-- Brand, then settings and the overflow of the same menu the bottom bar's "Más" opens. -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:baselineAligned="false"
+        android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <ScrollView
-            android:layout_width="@dimen/hap_rail_width"
-            android:layout_height="match_parent"
-            android:focusable="false"
-            android:scrollbars="none">
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
 
-            <LinearLayout
-                android:id="@+id/hap_nav_rail"
+            <TextView
+                android:id="@+id/hap_brand_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingBottom="@dimen/hap_gap_block">
+                android:text="@string/app_name"
+                android:textAppearance="@style/TextAppearance.HaP.Title" />
 
-                <TextView
-                    android:id="@+id/hap_brand_title"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingStart="@dimen/hap_nav_item_padding"
-                    android:paddingEnd="@dimen/hap_nav_item_padding"
-                    android:text="@string/app_name"
-                    android:textAppearance="@style/TextAppearance.HaP.Display" />
+            <TextView
+                android:id="@+id/hap_brand_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/brand_subtitle_phone"
+                android:textAppearance="@style/TextAppearance.HaP.Caption" />
+        </LinearLayout>
 
-                <TextView
-                    android:id="@+id/hap_brand_subtitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingStart="@dimen/hap_nav_item_padding"
-                    android:paddingEnd="@dimen/hap_nav_item_padding"
-                    android:paddingBottom="@dimen/hap_gap_block"
-                    android:text="@string/brand_subtitle"
-                    android:textAppearance="@style/TextAppearance.HaP.Caption" />
+        <ImageButton
+            android:id="@+id/hap_top_settings"
+            style="@style/Widget.HaP.TouchIcon"
+            android:layout_width="@dimen/hap_touch_action_size"
+            android:layout_height="@dimen/hap_touch_action_size"
+            android:contentDescription="@string/nav_settings"
+            android:src="@drawable/ic_nav_settings" />
 
-                <TextView
-                    android:id="@+id/hap_nav_home"
-                    style="@style/Widget.HaP.NavItem"
-                    android:layout_width="match_parent"
-                    android:layout_height="@dimen/hap_nav_item_height"
-                    android:layout_marginTop="@dimen/hap_gap_row"
-                    android:text="@string/nav_home" />
-
-                <TextView
-                    android:id="@+id/hap_nav_channels"
-                    style="@style/Widget.HaP.NavItem"
-                    android:layout_width="match_parent"
-                    android:layout_height="@dimen/hap_nav_item_height"
-                    android:layout_marginTop="@dimen/hap_gap_row"
-                    android:text="@string/nav_channels" />
-
-                <TextView
-                    android:id="@+id/hap_nav_sources"
-                    style="@style/Widget.HaP.NavItem"
-                    android:layout_width="match_parent"
-                    android:layout_height="@dimen/hap_nav_item_height"
-                    android:layout_marginTop="@dimen/hap_gap_row"
-                    android:text="@string/nav_sources" />
-
-                <TextView
-                    android:id="@+id/hap_nav_connections"
-                    style="@style/Widget.HaP.NavItem"
-                    android:layout_width="match_parent"
-                    android:layout_height="@dimen/hap_nav_item_height"
-                    android:layout_marginTop="@dimen/hap_gap_row"
-                    android:text="@string/nav_connections" />
-
-                <TextView
-                    android:id="@+id/hap_nav_settings"
-                    style="@style/Widget.HaP.NavItem"
-                    android:layout_width="match_parent"
-                    android:layout_height="@dimen/hap_nav_item_height"
-                    android:layout_marginTop="@dimen/hap_gap_row"
-                    android:text="@string/nav_settings" />
-            </LinearLayout>
-        </ScrollView>
-
-        <!--
-            The content area is the only weighted child: it has to take the width the fixed rail
-            leaves. The single extra measure pass this causes is the price of the rail staying a
-            fixed 300dp, and it is paid only on layout, never on a state refresh.
-        -->
-        <FrameLayout
-            android:id="@+id/hap_section_container"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginStart="@dimen/hap_rail_content_gap"
-            android:layout_weight="1"
-            tools:ignore="NestedWeights" />
+        <ImageButton
+            android:id="@+id/hap_top_overflow"
+            style="@style/Widget.HaP.TouchIcon"
+            android:layout_width="@dimen/hap_touch_action_size"
+            android:layout_height="@dimen/hap_touch_action_size"
+            android:layout_marginStart="@dimen/hap_gap_row"
+            android:contentDescription="@string/nav_more_description"
+            android:src="@drawable/ic_overflow_vertical" />
     </LinearLayout>
 
     <View
@@ -119,25 +77,96 @@
         android:layout_marginTop="@dimen/hap_gap_block"
         android:background="@color/hap_hairline" />
 
+    <!-- The one child the activity fills with the five pre-built sections. -->
+    <FrameLayout
+        android:id="@+id/hap_section_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/hap_gap_block"
+        android:layout_weight="1" />
+
+    <!--
+        The navigation area. It is one container on purpose: the D-pad navigator is given
+        hap_nav_rail as the graph it never leaves, so the two menu rows and the four bar entries
+        are one closed loop instead of a place a press can escape from into the content.
+    -->
     <LinearLayout
+        android:id="@+id/hap_nav_rail"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/hap_gap_row"
-        android:orientation="horizontal">
+        android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/hap_hint_select"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/hap_nav_menu"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/hint_select"
-            android:textAppearance="@style/TextAppearance.HaP.Caption" />
+            android:layout_marginTop="@dimen/hap_gap_block"
+            android:background="@drawable/bg_panel"
+            android:orientation="vertical"
+            android:padding="@dimen/hap_gap_row"
+            android:visibility="gone"
+            tools:visibility="visible">
 
-        <TextView
-            android:id="@+id/hap_hint_back"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/hap_gap_block"
-            android:text="@string/hint_back"
-            android:textAppearance="@style/TextAppearance.HaP.Caption" />
+            <TextView
+                android:id="@+id/hap_nav_connections"
+                style="@style/Widget.HaP.NavItemTouchMenu"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/hap_nav_item_height"
+                android:text="@string/nav_connections" />
+
+            <TextView
+                android:id="@+id/hap_nav_settings"
+                style="@style/Widget.HaP.NavItemTouchMenu"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/hap_nav_item_height"
+                android:layout_marginTop="@dimen/hap_gap_row"
+                android:text="@string/nav_settings" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/hap_hairline"
+            android:layout_marginTop="@dimen/hap_gap_block"
+            android:background="@color/hap_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/hap_bottom_bar_height"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/hap_nav_home"
+                style="@style/Widget.HaP.NavItemTouch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="@string/nav_home" />
+
+            <TextView
+                android:id="@+id/hap_nav_sources"
+                style="@style/Widget.HaP.NavItemTouch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="@string/nav_lists" />
+
+            <TextView
+                android:id="@+id/hap_nav_channels"
+                style="@style/Widget.HaP.NavItemTouch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="@string/nav_channels" />
+
+            <!-- The fourth entry: it opens the menu above instead of navigating. -->
+            <TextView
+                android:id="@+id/hap_nav_more"
+                style="@style/Widget.HaP.NavItemTouch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:contentDescription="@string/nav_more_description"
+                android:text="@string/nav_more" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

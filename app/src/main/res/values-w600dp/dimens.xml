@@ -27,4 +27,8 @@
 
     <dimen name="hap_status_dot">12dp</dimen>
     <dimen name="hap_chevron">24dp</dimen>
+
+    <!-- The phone shell's measurements; the television layout does not use them. -->
+    <dimen name="hap_bottom_bar_height">72dp</dimen>
+    <dimen name="hap_touch_action_size">48dp</dimen>
 </resources>

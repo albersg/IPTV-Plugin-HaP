@@ -241,6 +241,18 @@
     <string name="hap_enable_switch_description">Iniciar o detener el servidor HaP</string>
 
     <!--
+        Interfaz de móvil (M2-M4). Conserva literalmente el texto de la maqueta del teléfono:
+        «Tu servidor IPTV», «Listas», «Más», y el recuento real de clientes conectados (S4),
+        values/strings.xml es su traducción al inglés y ambos deben mantenerse en sincronía.
+    -->
+    <string name="brand_subtitle_phone">Tu servidor IPTV</string>
+    <string name="nav_lists">Listas</string>
+    <string name="nav_more">Más</string>
+    <string name="nav_more_description">Más secciones</string>
+    <string name="home_status_pill_online">Online</string>
+    <string name="home_clients_connected">Clientes conectados: %1$d</string>
+
+    <!--
         Pantalla «Cómo ver mis canales» (S4). Conserva literalmente el texto del diseño aprobado:
         HaP es un servidor y nunca un reproductor, y muestra la dirección real de la lista.
         values/strings.xml es su traducción al inglés y ambos deben mantenerse en sincronía.

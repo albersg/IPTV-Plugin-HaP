@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The current section of the phone shell: a filled accent, no outline, no accent bar. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/hap_accent" />
+    <corners android:radius="@dimen/hap_nav_radius" />
+</shape>

@@ -35,4 +35,13 @@
 
     <dimen name="hap_status_dot">10dp</dimen>
     <dimen name="hap_chevron">20dp</dimen>
+
+    <!--
+        The phone shell's own measurements: the height of the four-entry bottom bar (icon above a
+        label, so it is taller than a rail entry) and the square of the top bar's two icon actions.
+        res/values-w600dp/dimens.xml defines the same names, unused by the television layout, so
+        both files stay in sync.
+    -->
+    <dimen name="hap_bottom_bar_height">64dp</dimen>
+    <dimen name="hap_touch_action_size">44dp</dimen>
 </resources>

@@ -241,6 +241,17 @@
     <string name="hap_enable_switch_description">Start or stop the HaP server</string>
 
     <!--
+        Phone shell (M2-M4). The Spanish file carries the exact wording of the phone mockup and
+        this file is its English translation; both must stay in sync.
+    -->
+    <string name="brand_subtitle_phone">Your IPTV server</string>
+    <string name="nav_lists">Lists</string>
+    <string name="nav_more">More</string>
+    <string name="nav_more_description">More sections</string>
+    <string name="home_status_pill_online">Online</string>
+    <string name="home_clients_connected">Connected clients: %1$d</string>
+
+    <!--
         "How to watch my channels" screen (S4). It explains in plain words that HaP is a server and
         never a player, and shows the real playlist address. The Spanish file carries the exact
         wording of the approved mockup; this file is its English translation.

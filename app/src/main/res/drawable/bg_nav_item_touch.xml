@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Phone navigation entry. The phone is touch-first, so a focused entry is a filled surface and
+    never the accent outline: on a tap-driven screen a ring around the thing under the finger
+    reads as a fault. Selected is a filled accent, which is what makes the current section obvious
+    at a glance; pressed and focused share the raised fill, so a phone with a keyboard or a remote
+    still shows where a press will land (S7).
+
+    The television keeps @drawable/bg_nav_item and its focus ring untouched (S1).
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:state_selected="true"
+        android:drawable="@drawable/bg_nav_item_touch_selected" />
+    <item
+        android:state_focused="true"
+        android:drawable="@drawable/bg_nav_item_touch_focused" />
+    <item
+        android:state_pressed="true"
+        android:drawable="@drawable/bg_nav_item_touch_focused" />
+    <item android:drawable="@android:color/transparent" />
+</selector>

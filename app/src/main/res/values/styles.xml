@@ -75,4 +75,49 @@
         <item name="android:maxLines">1</item>
         <item name="android:ellipsize">end</item>
     </style>
+
+    <!--
+        A phone bottom-bar entry: icon above a centred label, touch-first state list
+        (@drawable/bg_nav_item_touch) instead of the TV focus ring, and the shared body size so the
+        label stays legible at arm's length. Its height comes from @dimen/hap_bottom_bar_height in
+        the layout, because a style cannot carry layout_* attributes (see the note above).
+    -->
+    <style name="Widget.HaP.NavItemTouch">
+        <item name="android:background">@drawable/bg_nav_item_touch</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">@dimen/hap_gap_row</item>
+        <item name="android:paddingEnd">@dimen/hap_gap_row</item>
+        <item name="android:paddingTop">@dimen/hap_gap_row</item>
+        <item name="android:paddingBottom">@dimen/hap_gap_row</item>
+        <item name="android:textAppearance">@style/TextAppearance.HaP.Body</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <!--
+        A row of the phone's "Más" menu: text only and left aligned, because the two sections
+        behind Más are read, not glanced at, and an icon row would compete with the bottom bar for
+        the same gesture.
+    -->
+    <style name="Widget.HaP.NavItemTouchMenu">
+        <item name="android:background">@drawable/bg_nav_item_touch</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">@dimen/hap_nav_item_padding</item>
+        <item name="android:paddingEnd">@dimen/hap_nav_item_padding</item>
+        <item name="android:textAppearance">@style/TextAppearance.HaP.Subtitle</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <!-- The two icon actions of the phone top bar: settings and the overflow of the same menu. -->
+    <style name="Widget.HaP.TouchIcon">
+        <item name="android:background">@drawable/bg_nav_item_touch</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:scaleType">centerInside</item>
+    </style>
 </resources>

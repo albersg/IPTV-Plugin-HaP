@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The top bar's overflow action: the same menu as the bottom bar's "Más", drawn vertically. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="@color/hap_text_muted">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M10.5,5 A1.5,1.5 0 1 1 13.5,5 A1.5,1.5 0 0 1 10.5,5 Z M10.5,12 A1.5,1.5 0 1 1 13.5,12 A1.5,1.5 0 0 1 10.5,12 Z M10.5,19 A1.5,1.5 0 1 1 13.5,19 A1.5,1.5 0 0 1 10.5,19 Z" />
+</vector>

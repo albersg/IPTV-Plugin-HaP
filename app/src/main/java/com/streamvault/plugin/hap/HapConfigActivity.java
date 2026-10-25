@@ -135,6 +135,19 @@ public class HapConfigActivity extends Activity {
     private final List<TextView> navItems = new ArrayList<>();
     private LinearLayout navRail;
     private FrameLayout sectionContainer;
+    /**
+     * True when the inflated shell is the phone one.
+     *
+     * <p>Decided from the layout that {@code setContentView} just inflated — the phone bottom bar
+     * always carries the "Más" entry and the television rail never does — and never from the
+     * screen width, which is itself what chose the layout (M3). One activity therefore drives
+     * both shells, and the section list stays {@link HapSections}' (S5).
+     */
+    private boolean phoneShell;
+    /** The phone's "Más" menu, or {@code null} on the television shell. */
+    private LinearLayout navMenu;
+    /** The phone's fourth bottom-bar entry, or {@code null} on the television shell. */
+    private TextView navMoreItem;
     private HapSections.Section currentSection = HapSections.Section.INICIO;
     /**
      * Resolves every D-pad press and owns where focus goes: movement inside the rail and the
@@ -332,6 +345,9 @@ public class HapConfigActivity extends Activity {
             cancelUpdateDownload();
             return;
         }
+        // On a phone an open "Más" menu is the innermost thing on screen, so BACK closes it rather
+        // than leaving the section behind it (M3). On television there is no menu to close.
+        if (closeMoreMenu()) return;
         HapSections.Section target = HapSections.backTarget(currentSection);
         if (target != null) {
             showSection(target, false);
@@ -373,6 +389,7 @@ public class HapConfigActivity extends Activity {
     private void buildShell() {
         navRail = findViewById(R.id.hap_nav_rail);
         sectionContainer = findViewById(R.id.hap_section_container);
+        phoneShell = findViewById(R.id.hap_nav_more) != null;
         bindNavigation();
         buildSections();
         // One owner of the D-pad for the whole screen: it reads the live view tree on every press,
@@ -382,17 +399,91 @@ public class HapConfigActivity extends Activity {
         showSection(HapSections.Section.INICIO, false);
     }
 
-    /** Wires the five rail entries to their section, in {@link HapSections.Section} order. */
+    /** Wires the five section entries to their section, in {@link HapSections.Section} order. */
     private void bindNavigation() {
         navItems.clear();
         for (HapSections.Section section : HapSections.Section.values()) {
             TextView item = findViewById(navItemId(section));
-            item.setCompoundDrawablesWithIntrinsicBounds(navIconId(section), 0, 0, 0);
-            item.setCompoundDrawablePadding(dp(18));
+            if (item == null) continue;
+            applyEntryIcon(item, section);
             item.setContentDescription(getString(R.string.nav_item_description, item.getText()));
             item.setOnClickListener(v -> showSection(section, false));
             navItems.add(item);
         }
+        bindPhoneShell();
+    }
+
+    /**
+     * The icon of one section entry. The television rail keeps the icon at the start of a wide row,
+     * exactly as the box was verified (S1); a phone bottom-bar entry puts it above a centred label,
+     * and the two rows inside the "Más" menu carry no icon, because they are a menu and not a bar
+     * (M2).
+     */
+    private void applyEntryIcon(TextView item, HapSections.Section section) {
+        if (!phoneShell) {
+            item.setCompoundDrawablesWithIntrinsicBounds(navIconId(section), 0, 0, 0);
+            item.setCompoundDrawablePadding(dp(18));
+            return;
+        }
+        if (isBottomBarEntry(section)) {
+            item.setCompoundDrawablesWithIntrinsicBounds(0, navIconId(section), 0, 0);
+            item.setCompoundDrawablePadding(dp(4));
+        }
+    }
+
+    /** True when a section has its own entry in the phone bottom bar; the other two are in Más. */
+    private static boolean isBottomBarEntry(HapSections.Section section) {
+        return HapSections.mobileSection(HapSections.mobileEntry(section)) == section;
+    }
+
+    /**
+     * Wires the parts of the shell that only a phone has: the fourth bottom-bar entry that opens the
+     * "Más" menu, and the two top-bar actions of the mockup. On the television shell every id here
+     * is absent and nothing is wired, so the five direct rail entries are untouched (S1, M3).
+     */
+    private void bindPhoneShell() {
+        navMenu = findViewById(R.id.hap_nav_menu);
+        navMoreItem = findViewById(R.id.hap_nav_more);
+        if (navMoreItem != null) {
+            navMoreItem.setCompoundDrawablesWithIntrinsicBounds(0, R.drawable.ic_nav_more, 0, 0);
+            navMoreItem.setCompoundDrawablePadding(dp(4));
+            navMoreItem.setOnClickListener(v -> setMoreMenuOpen(!isMoreMenuOpen()));
+        }
+        View settingsAction = findViewById(R.id.hap_top_settings);
+        if (settingsAction != null) {
+            // The gear is the shortcut the mockup draws; it goes straight to Ajustes, which is one
+            // of the two sections behind Más and therefore has no bottom-bar entry of its own.
+            settingsAction.setOnClickListener(v -> showSection(HapSections.Section.AJUSTES, false));
+        }
+        View overflowAction = findViewById(R.id.hap_top_overflow);
+        if (overflowAction != null) {
+            overflowAction.setOnClickListener(v -> setMoreMenuOpen(!isMoreMenuOpen()));
+        }
+    }
+
+    private boolean isMoreMenuOpen() {
+        return navMenu != null && navMenu.getVisibility() == View.VISIBLE;
+    }
+
+    /**
+     * Opens or closes the phone's "Más" menu. The bottom entry and the top bar's overflow drive the
+     * same method, so there is exactly one answer to "is the menu open".
+     */
+    private void setMoreMenuOpen(boolean open) {
+        if (navMenu == null) return;
+        int target = open ? View.VISIBLE : View.GONE;
+        if (navMenu.getVisibility() != target) navMenu.setVisibility(target);
+    }
+
+    /**
+     * Closes the menu if it is open.
+     *
+     * @return true when it was open, so BACK can consume the press instead of leaving the section
+     */
+    private boolean closeMoreMenu() {
+        if (!isMoreMenuOpen()) return false;
+        setMoreMenuOpen(false);
+        return true;
     }
 
     private static int navIconId(HapSections.Section section) {
@@ -434,7 +525,7 @@ public class HapConfigActivity extends Activity {
     private void buildSections() {
         // The header panel (start/stop, restart, prepare /aio) lives inside the home status card
         // and keeps its behaviour there.
-        homeScreen = new HomeScreen(this, homeListener(), buildHeaderPanel());
+        homeScreen = new HomeScreen(this, homeListener(), buildHeaderPanel(), phoneShell);
         addSection(HapSections.Section.INICIO, homeScreen.getView());
         for (HapSections.Section section : HapSections.Section.values()) {
             if (section == HapSections.Section.INICIO) continue;
@@ -608,6 +699,14 @@ public class HapConfigActivity extends Activity {
             TextView item = navItemFor(each);
             if (item != null && item.isSelected() != (each == section)) item.setSelected(each == section);
         }
+
+        // On a phone the two sections behind the menu light up "Más", which is the entry that owns
+        // them; a navigation from anywhere also closes that menu, because it is a door, not a mode.
+        if (navMoreItem != null) {
+            boolean selected = HapSections.mobileEntry(section) == HapSections.MobileEntry.MAS;
+            if (navMoreItem.isSelected() != selected) navMoreItem.setSelected(selected);
+        }
+        setMoreMenuOpen(false);
 
         if (focusNavigator != null) {
             // The navigator keeps one remembered control per section, so entering a section returns
@@ -2025,16 +2124,39 @@ public class HapConfigActivity extends Activity {
 
     private void readRuntimeState() {
         RuntimeSnapshot snapshot = null;
+        HapBridge.HapStatus status = null;
         try {
-            snapshot = buildRuntimeSnapshot(HapBridge.status(this));
+            status = HapBridge.status(this);
+            snapshot = buildRuntimeSnapshot(status);
         } catch (Throwable ignored) {
             // A failed status read must not stop the 1s refresh loop.
         } finally {
             statusPollInFlight.set(false);
         }
         if (snapshot == null) return;
+        // The client count is a second, independent reading: a loopback request that must never run
+        // on the main thread, so it is asked here and not in buildRuntimeSnapshot, which the first
+        // paint also calls (M4, S4). Only the phone shell shows that line, so the television path
+        // keeps performing exactly the work it performed before this change (S1).
+        snapshot.connectedClients = phoneShell ? readConnectedClients(status) : -1;
         RuntimeSnapshot ready = snapshot;
         main(() -> applyRuntimeSnapshot(ready));
+    }
+
+    /**
+     * How many clients HaP is really serving, for the phone home card (S4).
+     *
+     * <p>{@link HapBridge#connectedClientCount()} is the only real source; nothing here derives a
+     * number. A negative answer means "not known" — the proxy is not running or the read failed —
+     * and the card then shows no line at all instead of a zero it cannot stand behind.
+     */
+    private static int readConnectedClients(HapBridge.HapStatus status) {
+        if (status == null || !status.proxyRunning) return -1;
+        try {
+            return HapBridge.connectedClientCount();
+        } catch (Throwable ignored) {
+            return -1;
+        }
     }
 
     private RuntimeSnapshot buildRuntimeSnapshot(HapBridge.HapStatus status) {
@@ -2121,7 +2243,10 @@ public class HapConfigActivity extends Activity {
         }
 
         // Only the words that changed are re-set, so a refresh never rebuilds or re-focuses.
-        if (homeScreen != null) homeScreen.applyServices(snapshot.services);
+        if (homeScreen != null) {
+            homeScreen.applyServices(snapshot.services);
+            homeScreen.applyConnectedClients(snapshot.connectedClients);
+        }
     }
 
     private void applyCaption(TextView view, String text) {
@@ -3630,6 +3755,8 @@ public class HapConfigActivity extends Activity {
         List<HapRows.Endpoint> endpoints;
         String logText;
         HapServiceStates services;
+        /** Real connected-client count, or -1 when the runtime did not answer (M4, S4). */
+        int connectedClients = -1;
     }
 
     private static final class PanelViews {

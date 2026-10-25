@@ -139,4 +139,94 @@ public final class HapSectionsTest {
     public void backOnHomeLeavesTheActivity() {
         assertNull(HapSections.backTarget(HapSections.Section.INICIO));
     }
+
+    // ------------------------------------------------------------------ phone shell (M3, S5)
+
+    /** The mockup's bottom bar has exactly these four entries, in this order. */
+    @Test
+    public void phoneBottomBarIsTheFourEntriesOfTheMockupInOrder() {
+        assertArrayEquals(
+                new HapSections.MobileEntry[]{
+                        HapSections.MobileEntry.INICIO,
+                        HapSections.MobileEntry.LISTAS,
+                        HapSections.MobileEntry.CANALES,
+                        HapSections.MobileEntry.MAS
+                },
+                HapSections.MobileEntry.values()
+        );
+    }
+
+    /** Three entries open a section directly; Más has no section of its own, it opens a menu. */
+    @Test
+    public void threeEntriesOpenTheirSectionAndMoreOpensNone() {
+        assertEquals(HapSections.Section.INICIO, HapSections.mobileSection(HapSections.MobileEntry.INICIO));
+        assertEquals(HapSections.Section.FUENTES, HapSections.mobileSection(HapSections.MobileEntry.LISTAS));
+        assertEquals(HapSections.Section.CANALES, HapSections.mobileSection(HapSections.MobileEntry.CANALES));
+        assertNull(HapSections.mobileSection(HapSections.MobileEntry.MAS));
+    }
+
+    /** Which entry is highlighted for a section: the last two live behind Más. */
+    @Test
+    public void eachSectionMapsBackToTheBottomBarEntryThatOwnsIt() {
+        assertEquals(HapSections.MobileEntry.INICIO, HapSections.mobileEntry(HapSections.Section.INICIO));
+        assertEquals(HapSections.MobileEntry.LISTAS, HapSections.mobileEntry(HapSections.Section.FUENTES));
+        assertEquals(HapSections.MobileEntry.CANALES, HapSections.mobileEntry(HapSections.Section.CANALES));
+        assertEquals(HapSections.MobileEntry.MAS, HapSections.mobileEntry(HapSections.Section.CONEXIONES));
+        assertEquals(HapSections.MobileEntry.MAS, HapSections.mobileEntry(HapSections.Section.AJUSTES));
+    }
+
+    /** Más offers the two sections the bar has no room for, in rail order. */
+    @Test
+    public void moreMenuOffersConnectionsAndSettingsInThatOrder() {
+        assertEquals(
+                Arrays.asList(HapSections.Section.CONEXIONES, HapSections.Section.AJUSTES),
+                HapSections.moreMenu()
+        );
+    }
+
+    /** The menu is read by the layout builder; a mutable list would allow a late add. */
+    @Test
+    public void moreMenuIsImmutable() {
+        try {
+            HapSections.moreMenu().add(HapSections.Section.INICIO);
+            throw new AssertionError("moreMenu() is mutable");
+        } catch (UnsupportedOperationException expected) {
+            // immutable, as intended
+        }
+    }
+
+    /** Nothing is lost on a phone: three direct entries plus the two behind Más cover all five. */
+    @Test
+    public void everySectionIsReachableFromThePhoneShell() {
+        EnumSet<HapSections.Section> direct = EnumSet.noneOf(HapSections.Section.class);
+        for (HapSections.MobileEntry entry : HapSections.MobileEntry.values()) {
+            HapSections.Section section = HapSections.mobileSection(entry);
+            if (section != null) direct.add(section);
+        }
+        EnumSet<HapSections.Section> behindMore = EnumSet.copyOf(HapSections.moreMenu());
+        assertTrue(
+                "a section is offered twice on a phone",
+                java.util.Collections.disjoint(direct, behindMore)
+        );
+        EnumSet<HapSections.Section> reachable = EnumSet.copyOf(direct);
+        reachable.addAll(behindMore);
+        assertEquals("a section is unreachable on a phone", EnumSet.allOf(HapSections.Section.class), reachable);
+    }
+
+    /** The two mappings are inverses; the two sections behind Más are the only non-round trip. */
+    @Test
+    public void bottomBarAndSectionsAgreeInBothDirections() {
+        for (HapSections.MobileEntry entry : HapSections.MobileEntry.values()) {
+            HapSections.Section section = HapSections.mobileSection(entry);
+            if (section != null) assertEquals(entry, HapSections.mobileEntry(section));
+        }
+        for (HapSections.Section section : HapSections.Section.values()) {
+            HapSections.MobileEntry entry = HapSections.mobileEntry(section);
+            if (entry == HapSections.MobileEntry.MAS) {
+                assertTrue("Más is not reached by a bottom-bar section", HapSections.moreMenu().contains(section));
+            } else {
+                assertEquals(section, HapSections.mobileSection(entry));
+            }
+        }
+    }
 }
