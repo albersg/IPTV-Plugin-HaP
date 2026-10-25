@@ -74,6 +74,14 @@
                     android:text="@string/nav_channels" />
 
                 <TextView
+                    android:id="@+id/hap_nav_events"
+                    style="@style/Widget.HaP.NavItem"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/hap_nav_item_height"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/nav_events" />
+
+                <TextView
                     android:id="@+id/hap_nav_sources"
                     style="@style/Widget.HaP.NavItem"
                     android:layout_width="match_parent"

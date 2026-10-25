@@ -391,4 +391,5 @@
         <item quantity="one">%d canal</item>
         <item quantity="other">%d canales</item>
     </plurals>
+    <string name="nav_events">Eventos</string>
 </resources>

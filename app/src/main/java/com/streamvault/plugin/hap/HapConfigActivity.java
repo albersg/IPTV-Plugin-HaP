@@ -200,6 +200,7 @@ public class HapConfigActivity extends Activity {
     private InPlaceList<HapRows.Endpoint> endpointList;
     private InPlaceList<HapRows.Source> sourceList;
     private InPlaceList<HapRows.CustomChannel> customChannelList;
+    private TextView eventFeedbackView;
     private InPlaceList<HapRows.Client> clientList;
     private InPlaceList<HapRows.PluginTab> pluginTabList;
     /**
@@ -522,6 +523,8 @@ public class HapConfigActivity extends Activity {
         switch (section) {
             case CANALES:
                 return R.drawable.ic_nav_channels;
+            case EVENTOS:
+                return R.drawable.ic_nav_events;
             case FUENTES:
                 return R.drawable.ic_nav_sources;
             case CONEXIONES:
@@ -538,6 +541,8 @@ public class HapConfigActivity extends Activity {
         switch (section) {
             case CANALES:
                 return R.id.hap_nav_channels;
+            case EVENTOS:
+                return R.id.hap_nav_events;
             case FUENTES:
                 return R.id.hap_nav_sources;
             case CONEXIONES:
@@ -586,6 +591,8 @@ public class HapConfigActivity extends Activity {
         switch (section) {
             case CANALES:
                 return R.string.nav_channels;
+            case EVENTOS:
+                return R.string.nav_events;
             case FUENTES:
                 return R.string.nav_sources;
             case CONEXIONES:
@@ -632,6 +639,8 @@ public class HapConfigActivity extends Activity {
                 return buildDiagnosticsPanel();
             case CHANNEL_STATUS:
                 return buildChannelStatusPanel();
+            case EVENTS:
+                return buildEventsPanel();
             case SOURCES:
                 return buildSourcesPanel();
             case CUSTOM_CHANNELS:
@@ -1297,19 +1306,74 @@ public class HapConfigActivity extends Activity {
      * <p>Off the main thread: reading the guide from disk and parsing it is not instant, and on the device
      * a cold download took 96.8 seconds. Nothing here touches the network on the main thread.
      */
-    private void loadEvents(LinearLayout container, Button trigger) {
+    /** Shows what the events section is doing: reading, empty, failed, or how many are on. */
+    private void setEventFeedback(String message) {
+        if (eventFeedbackView == null) return;
+        eventFeedbackView.setText(message);
+    }
+
+    private View buildEventsPanel() {
+        PanelViews panel = panel(null, false, true);
+
+        LinearLayout eventsBody = new LinearLayout(this);
+        eventsBody.setOrientation(LinearLayout.VERTICAL);
+        InPlaceList<EventCatalog.Event> eventList =
+                new InPlaceList<>(eventsBody, EventRow::new);
+
+        Button eventsButton = button(getString(R.string.button_events));
+        eventsButton.setOnClickListener(v -> loadEvents(eventList, eventsButton));
+        panel.body.addView(eventsButton, wrapWrap());
+
+        eventFeedbackView = text("", 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+        eventFeedbackView.setPadding(0, dp(10), 0, 0);
+        panel.body.addView(eventFeedbackView, matchWrap());
+        panel.body.addView(eventsBody, matchWrap());
+
+        // Opens on arrival: an events section that greets you with a button and nothing else would make
+        // the reader press twice to see anything.
+        panel.body.post(() -> eventsButton.performClick());
+        return panel.container;
+    }
+
+    /** One event line. Text only, but focusable so the D-pad can walk the list. */
+    private final class EventRow implements InPlaceList.Row<EventCatalog.Event> {
+        private final TextView view;
+
+        EventRow() {
+            view = text("", 14, COLOR_TEXT_PRIMARY, Typeface.NORMAL);
+            view.setFocusable(true);
+            view.setFocusableInTouchMode(true);
+            view.setLayoutParams(matchWrap());
+        }
+
+        @Override
+        public View view() {
+            return view;
+        }
+
+        @Override
+        public void bind(EventCatalog.Event event) {
+            String time = event.startMillis <= 0 ? "--:--"
+                    : new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                            .format(new java.util.Date(event.startMillis));
+            String sport = event.sport() == null ? "" : " · " + event.sport().label();
+            view.setText(time + "  " + event.title + "  ·  "
+                    + getResources().getQuantityString(
+                            R.plurals.events_channel_count, event.channelCount(), event.channelCount())
+                    + sport);
+        }
+    }
+
+    private void loadEvents(InPlaceList<EventCatalog.Event> list, Button trigger) {
         HapBridge.PluginChannelsInfo plugin = selectedPlugin();
-        container.setVisibility(View.VISIBLE);
-        container.removeAllViews();
         if (plugin == null || plugin.channels.isEmpty()) {
-            container.addView(text(getString(R.string.events_no_channels), 13, COLOR_TEXT_SECONDARY,
-                    Typeface.NORMAL), matchWrap());
+            setEventFeedback(getString(R.string.events_no_channels));
+            list.apply(java.util.Collections.<EventCatalog.Event>emptyList());
             return;
         }
         trigger.setEnabled(false);
-        TextView progress = text(getString(R.string.events_loading), 13, COLOR_TEXT_SECONDARY,
-                Typeface.NORMAL);
-        container.addView(progress, matchWrap());
+        setEventFeedback(getString(R.string.events_loading));
+        list.apply(java.util.Collections.<EventCatalog.Event>emptyList());
 
         new Thread(() -> {
             List<EventCatalog.Event> events = new ArrayList<>();
@@ -1340,34 +1404,19 @@ public class HapConfigActivity extends Activity {
             final List<EventCatalog.Event> loaded = events;
             runOnUiThread(() -> {
                 trigger.setEnabled(true);
-                container.removeAllViews();
                 if (failureMessage != null) {
-                    container.addView(text(getString(R.string.events_error, failureMessage), 13,
-                            COLOR_TEXT_SECONDARY, Typeface.NORMAL), matchWrap());
+                    setEventFeedback(getString(R.string.events_error, failureMessage));
+                    list.apply(java.util.Collections.<EventCatalog.Event>emptyList());
                     return;
                 }
                 if (loaded.isEmpty()) {
-                    container.addView(text(getString(R.string.events_empty), 13, COLOR_TEXT_SECONDARY,
-                            Typeface.NORMAL), matchWrap());
-                    container.addView(text(getString(R.string.events_summary, 0, matchedCount), 12,
-                            COLOR_TEXT_SECONDARY, Typeface.NORMAL), matchWrap());
+                    setEventFeedback(getString(R.string.events_empty) + " · "
+                            + getString(R.string.events_summary, 0, matchedCount));
+                    list.apply(java.util.Collections.<EventCatalog.Event>emptyList());
                     return;
                 }
-                container.addView(text(getString(R.string.events_summary, loaded.size(), matchedCount),
-                        12, COLOR_TEXT_SECONDARY, Typeface.NORMAL), matchWrap());
-                java.text.SimpleDateFormat clock =
-                        new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
-                for (EventCatalog.Event event : loaded) {
-                    String time = event.startMillis <= 0 ? "--:--"
-                            : clock.format(new java.util.Date(event.startMillis));
-                    String sport = event.sport() == null ? "" : " · " + event.sport().label();
-                    String line = time + "  " + event.title + "  ·  "
-                            + getResources().getQuantityString(
-                                    R.plurals.events_channel_count, event.channelCount(),
-                                    event.channelCount())
-                            + sport;
-                    container.addView(text(line, 14, COLOR_TEXT_PRIMARY, Typeface.NORMAL), matchWrap());
-                }
+                setEventFeedback(getString(R.string.events_summary, loaded.size(), matchedCount));
+                list.apply(loaded);
             });
         }, "hap-events").start();
     }
@@ -1398,18 +1447,6 @@ public class HapConfigActivity extends Activity {
         testList.setOnClickListener(v -> checkSelectedList());
         controls.addView(testList, wrapWrapLeft(8));
 
-        // Events live here rather than in a new section: the rail was verified on the box and adding a
-        // fifth entry would have to be re-walked with the D-pad. What is on now belongs next to the
-        // channels anyway.
-        final LinearLayout eventsBody = new LinearLayout(this);
-        eventsBody.setOrientation(LinearLayout.VERTICAL);
-        eventsBody.setVisibility(View.GONE);
-
-        Button eventsButton = button(getString(R.string.button_events));
-        eventsButton.setOnClickListener(v -> loadEvents(eventsBody, eventsButton));
-        controls.addView(eventsButton, wrapWrapLeft(8));
-
-        panel.body.addView(eventsBody, matchWrap());
 
         stopChannelTestButton = button(getString(R.string.button_stop));
         stopChannelTestButton.setEnabled(false);

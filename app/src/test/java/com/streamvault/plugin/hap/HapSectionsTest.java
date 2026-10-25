@@ -33,6 +33,7 @@ public final class HapSectionsTest {
                 new HapSections.Section[]{
                         HapSections.Section.INICIO,
                         HapSections.Section.CANALES,
+                        HapSections.Section.EVENTOS,
                         HapSections.Section.FUENTES,
                         HapSections.Section.CONEXIONES,
                         HapSections.Section.AJUSTES
@@ -177,9 +178,10 @@ public final class HapSectionsTest {
 
     /** Más offers the two sections the bar has no room for, in rail order. */
     @Test
-    public void moreMenuOffersConnectionsAndSettingsInThatOrder() {
+    public void moreMenuOffersEventsConnectionsAndSettingsInThatOrder() {
         assertEquals(
-                Arrays.asList(HapSections.Section.CONEXIONES, HapSections.Section.AJUSTES),
+                Arrays.asList(HapSections.Section.EVENTOS, HapSections.Section.CONEXIONES,
+                        HapSections.Section.AJUSTES),
                 HapSections.moreMenu()
         );
     }

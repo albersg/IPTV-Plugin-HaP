@@ -22,6 +22,7 @@ final class HapSections {
     enum Section {
         INICIO,
         CANALES,
+        EVENTOS,
         FUENTES,
         CONEXIONES,
         AJUSTES
@@ -51,6 +52,7 @@ final class HapSections {
         HEADER,
         DIAGNOSTICS,
         CHANNEL_STATUS,
+        EVENTS,
         SOURCES,
         CUSTOM_CHANNELS,
         AIO,
@@ -68,6 +70,8 @@ final class HapSections {
             Collections.unmodifiableList(Arrays.asList(Panel.HEADER));
     private static final List<Panel> CHANNELS =
             Collections.unmodifiableList(Arrays.asList(Panel.CHANNEL_STATUS));
+    private static final List<Panel> EVENTS =
+            Collections.unmodifiableList(Arrays.asList(Panel.EVENTS));
     private static final List<Panel> SOURCES =
             Collections.unmodifiableList(Arrays.asList(Panel.SOURCES, Panel.CUSTOM_CHANNELS));
     private static final List<Panel> CONNECTIONS =
@@ -89,7 +93,7 @@ final class HapSections {
      * nothing else: the television keeps all five as direct entries (S1, S5).
      */
     private static final List<Section> MORE_MENU =
-            Collections.unmodifiableList(Arrays.asList(Section.CONEXIONES, Section.AJUSTES));
+            Collections.unmodifiableList(Arrays.asList(Section.EVENTOS, Section.CONEXIONES, Section.AJUSTES));
 
     private HapSections() {
     }
@@ -101,6 +105,8 @@ final class HapSections {
                 return HOME;
             case CANALES:
                 return CHANNELS;
+            case EVENTOS:
+                return EVENTS;
             case FUENTES:
                 return SOURCES;
             case CONEXIONES:
@@ -149,8 +155,10 @@ final class HapSections {
                 return MobileEntry.LISTAS;
             case CANALES:
                 return MobileEntry.CANALES;
+            case EVENTOS:
             case CONEXIONES:
             case AJUSTES:
+                // Events is reached from the phone's Más menu, which lists it first.
                 return MobileEntry.MAS;
             case INICIO:
             default:
