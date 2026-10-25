@@ -54,6 +54,32 @@
 - **T5 — verificación en la caja** (S2, S3, S6). `adb push` de un M3U de prueba, importación real en la
   tele, la fuente aparece y `Test lista` la lee; captura de evidencia.
 
+## Estado
+
+- **T1, T2, T3a y T3b entregados** en `adf49e6` y `6eaeaef`, en la rama `feat/local-m3u-import`.
+- **T5 verificado en la caja el 2026-02-14**, con estas evidencias:
+  - `adb push prueba-local.m3u` a
+    `/sdcard/Android/data/com.streamvault.plugin.hap/files/lists/` (250 B) y la app lo lista como
+    `prueba-local.m3u`, 250 B, con su botón `Añadir`.
+  - Al pulsar `Añadir`: «Fuente añadida», fila nueva con el valor
+    `localfile:/storage/emulated/0/.../files/lists/prueba-local.m3u` y la casilla marcada.
+  - Con el servidor en marcha, el proxy sirve el contenido del fichero:
+    `GET /userm3u` devuelve los dos canales con `group-title="Prueba"`, y `GET /aio` los expande a
+    `content_id/<infohash>/...`, que es la ruta real de reproducción.
+- **T4 entregado**: `docs/Ipfs-Sources.md` compara pasarela pública, Kubo embebido y nodo externo.
+
+### Frontera de la rebanada
+
+La función se entrega como una sola unidad: el lector nativo, el tipo de fuente, la validación y la
+pantalla que la crea son un mismo comportamiento, y separarlos dejaría tests sin el código que prueban.
+Los dos commits del trabajo suman unas 900 líneas y van juntos en el mismo PR.
+
+### Lo que no se probó
+
+- El selector `GET_CONTENT`: en esta caja resuelve, y el botón `Importar archivo` aparece, pero no se
+  pulsó ni se eligió un archivo con él. La vía verificada es la carpeta.
+- Borrar la fuente desde la fila (`Quitar`) no se ejercitó en pantalla.
+
 ## Log
 
 - **L1.** «podemos tener ambas opciones? tanto url como fichero local? que me lo pases mediante adb a la
