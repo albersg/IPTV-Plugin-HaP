@@ -3129,12 +3129,12 @@ public class HapConfigActivity extends Activity {
      */
     private void watchChannel(HapRows.Channel channel) {
         if (channel.contentId == null || channel.contentId.trim().isEmpty()) return;
-        String url = HapBridge.channelUrl(channel.contentId, channel.name);
-        // "video/*", not "video/mp2t". The box's own player (MiTV) declares its filter as the partial
-        // type "video" plus "video/*", and AceStream Pro declares video/mp2t: a wildcard is what matches
-        // both. A concrete subtype excluded some players, and no type at all excluded MiTV.
+        // AceStream Pro is a player, but for acestream:// links: handed an http URL it treats it as its
+        // own API query and answers "analyze failed". So the channel goes out on the protocol that app
+        // speaks, the same way every other IPTV app launches it. That makes AceStream do the P2P itself,
+        // which is also why this path does not depend on the embedded engine's broadcast.
         Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setDataAndType(Uri.parse(url), "video/*");
+        intent.setData(Uri.parse("acestream://" + channel.contentId));
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(intent);
