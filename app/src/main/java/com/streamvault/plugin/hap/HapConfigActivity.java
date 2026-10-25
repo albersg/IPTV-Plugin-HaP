@@ -438,14 +438,37 @@ public class HapConfigActivity extends Activity {
     }
 
     /** One scrollable column per section, in the order {@link HapSections} declares. */
+    /** The page title of a section, in the same size Inicio uses. */
+    private View sectionHeading(HapSections.Section section) {
+        TextView title = text(getString(sectionTitleRes(section)), 26, COLOR_TEXT_PRIMARY, Typeface.BOLD);
+        title.setPadding(0, 0, 0, dp(4));
+        return title;
+    }
+
+    private static int sectionTitleRes(HapSections.Section section) {
+        switch (section) {
+            case CANALES:
+                return R.string.nav_channels;
+            case FUENTES:
+                return R.string.nav_sources;
+            case CONEXIONES:
+                return R.string.nav_connections;
+            case AJUSTES:
+                return R.string.nav_settings;
+            case INICIO:
+            default:
+                return R.string.nav_home;
+        }
+    }
+
     private View buildSectionView(HapSections.Section section) {
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
+        // Every section announces itself, the way Inicio does: without this the user lands on a
+        // stack of cards with no idea which part of HaP they are looking at.
+        column.addView(sectionHeading(section), matchWrap());
         for (HapSections.Panel panel : HapSections.panels(section)) {
-            column.addView(
-                    buildPanel(panel),
-                    column.getChildCount() == 0 ? matchWrap() : matchWrapTop(20)
-            );
+            column.addView(buildPanel(panel), matchWrapTop(20));
         }
 
         ScrollView scroll = new ScrollView(this);
