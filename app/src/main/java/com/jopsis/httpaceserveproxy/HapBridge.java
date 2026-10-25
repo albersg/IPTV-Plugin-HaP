@@ -70,6 +70,17 @@ public final class HapBridge {
         ContextCompat.startForegroundService(context.getApplicationContext(), intent);
     }
 
+    /**
+     * The in-app runtime log as text.
+     *
+     * <p>Engine output deliberately stays out of logcat, because it carries content ids and upstream URLs.
+     * That makes a failed engine silent unless something can read the in-app log, which is what this is
+     * for: the debug tool prints it, and the settings screen shows it.
+     */
+    public static String logDump() {
+        return ServiceState.log();
+    }
+
     public static HapStatus status(Context context) {
         return new HapStatus(
                 ServiceState.desiredRunning,

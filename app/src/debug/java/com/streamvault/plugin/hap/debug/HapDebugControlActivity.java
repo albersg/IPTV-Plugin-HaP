@@ -165,6 +165,18 @@ public final class HapDebugControlActivity extends Activity {
             case "server_mode_off":
                 HapBridge.setServerModeEnabled(this, false);
                 return "server_mode_off";
+            case "log": {
+                // One line per logcat entry, so the whole runtime log can be read from a script without
+                // walking the settings UI.
+                String dump = HapBridge.logDump();
+                int lines = 0;
+                for (String line : dump.split("\\n")) {
+                    if (line.trim().isEmpty()) continue;
+                    Log.i("HapDebugLog", line);
+                    lines++;
+                }
+                return "logged " + lines + " lines";
+            }
             case "guide":
                 return measureGuide();
             case "wait_ready": {

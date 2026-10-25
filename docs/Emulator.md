@@ -79,3 +79,30 @@ truncation and the events screen can all be judged here.
 
 It does not replace the box: the AceStream engine, the real channels, the 2 GB of RAM and the actual
 network only exist there. Playback and server behaviour stay a device check.
+
+## What actually runs here, and what does not
+
+Measured on `android-34;google_apis;x86_64` with the arm64 APK:
+
+| | Result |
+| --- | --- |
+The app, its layouts, focus, lists | **runs** |
+The AceStream engine (AceServe) | **cannot run** |
+
+The engine fails with a message this specific, read from the app's in-app log:
+
+```
+CANNOT LINK EXECUTABLE "/system/bin/ndk_translation_program_runner_binfmt_misc_arm64":
+".../aceserve/arm64-v8a/python/lib/libxml2.so" is for EM_AARCH64 (183) instead of EM_X86_64 (62)
+```
+
+The ARM translation layer runs `libacepython.so`, but the Python interpreter it launches then tries to link
+an arm64 shared object through the x86_64 loader. There is no way around that without building the engine
+for x86_64, which is not what the box needs.
+
+Consequence, and it matters: **"Load lists" cannot work on the emulator**, because it reads the channel list
+from the local proxy. So the emulator verifies appearance, navigation and the events layout, and it cannot
+verify anything behind the server.
+
+That failure was invisible until the debug control activity could print the in-app log
+(`am start ... --es op log`), because engine output is deliberately kept out of logcat.
