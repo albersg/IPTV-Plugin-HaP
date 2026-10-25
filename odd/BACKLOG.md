@@ -85,6 +85,28 @@ interval. A setting to make it manual-only does not exist.
 
 ## 6. Defects observed on the device and not yet fixed
 
+**The D-pad loses presses and lets focus escape the content.** Reported first because it is the
+condition attached to keeping Android Views, and an earlier note in this file claimed navigation was
+verified. That claim was too strong: what was verified is the rail on its own. Inside a section it
+fails.
+
+Observed, repeatedly, on `Ajustes`:
+
+- Four DPAD_DOWN from Inicio at one-second spacing landed on `Conexiones` (index 3) instead of
+  `Ajustes` (index 4). At 1.2 s the same four presses land correctly. So a press is swallowed when
+  they arrive faster than roughly once per second.
+- From the Privacy switch, one DPAD_DOWN moved focus out of the content and onto `Inicio` in the
+  rail, and the following OK therefore did nothing to the switch it was meant to toggle. Focus
+  leaving the content downwards is a navigation defect, not a layout one.
+
+Working hypothesis to test rather than assume: the navigator builds one row model for the window and
+treats the rail and the section as consecutive rows, so DOWN past the last control of a section wraps
+into the rail instead of clamping, and a press arriving while the row model is being rebuilt against
+a live tree is dropped. Both would be fixed in `FocusNavigator`, not in the panels.
+
+Until this is fixed and re-verified, the decision to keep Android Views is **not** discharged: the
+reviewer's condition was that navigation and focus demonstrably pass, and they do not yet.
+
 - **`Ajustes` shows an empty card.** The advanced IPFS section renders as a large empty surface with
   only a "+ Avanzado" label above it, and "+ Log" sits inside it. Collapsed sections should not leave
   a hole.
