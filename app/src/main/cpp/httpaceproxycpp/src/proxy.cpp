@@ -683,8 +683,23 @@ Json Proxy::check_channel_peers(const std::string& content_id, int max_wait, con
         // P2P broadcast and shuts the control session down.
         AceTestSession session(ace);
         ace.authenticate();
-        auto info = ace.content_info({{"content_id", content_id}, {"sessionID", "0"}});
-        auto params = std::map<std::string, std::string>{{"content_id", content_id}, {"file_indexes", "0"}, {"stream_type", config_.stream_type_string()}};
+        // The START line the engine expects carries six positional fields after the content id. This
+        // check used to send only file_indexes and the stream type, so the engine had a truncated
+        // command and never answered: every channel reported "timeout waiting for START". The map is
+        // now the same one the playback path builds, which is the only sequence proven to work on this
+        // engine.
+        std::map<std::string, std::string> params = {
+            {"content_id", content_id},
+            {"file_indexes", "0"},
+            {"developer_id", "0"},
+            {"affiliate_id", "0"},
+            {"zone_id", "0"},
+            {"stream_id", "0"},
+            {"stream_type", config_.stream_type_string()},
+            {"sessionID", "0"},
+        };
+        // Loading first is what gives the engine the file list; START alone has nothing to play.
+        auto info = ace.load_async(params);
         ace.start_broadcast(params);
         session.mark_broadcast_started();
         int peers = 0;
