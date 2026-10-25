@@ -158,6 +158,29 @@ ADB=... tools/device-check.sh control start
 ADB=... tools/device-check.sh control status
 ```
 
+## Interface
+
+`HapConfigActivity` is now a shell, not the interface itself. Its root is
+`res/layout/activity_hap.xml`: a 300dp navigation rail with five sections — Inicio,
+Canales, Fuentes, Conexiones, Ajustes — beside a content `FrameLayout`, plus a key-hint
+footer. `HomeScreen` builds the home content; `HapSections` maps each section to the panel
+builders it hosts and is pinned by a test, so every panel builder must be called exactly
+once. `ConnectPlayerActivity` is the separate how-to-watch screen the home card opens; it is
+`exported="false"` and is not a launcher entry.
+
+Sections are built once and revealed by visibility alone. Never rebuild a section to refresh
+it: set text on the views that changed. `removeAllViews()` remains in eight list renderers and
+is a known cost, not a pattern to copy.
+
+The design system lives in `res/values/colors.xml`, `dimens.xml` and `styles.xml`
+(`TextAppearance.HaP.*`), with focus rendered by the `res/drawable/bg_*` state lists so it
+survives refreshes. TV dimens are in `values-w600dp`, not `values-sw600dp`: a TV box reports
+960x540dp, where a smallest-width qualifier would never match. Rail selection and rail focus
+are separate states and must both stay visible.
+
+On-device behaviour is not established by a build. `docs/Tv-Verification-Checklist.md` lists
+what must actually be observed with the remote before any interface claim is treated as true.
+
 ## Change Rules
 
 - Keep version data synchronized across `app/build.gradle.kts`,
