@@ -10,6 +10,7 @@ set(HTTPACE_CPP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/httpaceproxycpp)
 add_library(httpaceproxy_core STATIC
     ${HTTPACE_CPP_DIR}/src/ace_client.cpp
     ${HTTPACE_CPP_DIR}/src/broadcast.cpp
+    ${HTTPACE_CPP_DIR}/src/chunk_parser.cpp
     ${HTTPACE_CPP_DIR}/src/config.cpp
     ${HTTPACE_CPP_DIR}/src/http_server.cpp
     ${HTTPACE_CPP_DIR}/src/json.cpp

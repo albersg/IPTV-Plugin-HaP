@@ -1,4 +1,5 @@
 #include "httpaceproxycpp/http_client.hpp"
+#include "httpaceproxycpp/chunk_parser.hpp"
 #include "httpaceproxycpp/util.hpp"
 
 #include <cerrno>
@@ -134,25 +135,6 @@ std::map<std::string, std::string> parse_response_headers(const std::string& hea
     return out;
 }
 
-bool parse_chunk_size(const std::string& line, std::size_t& size) {
-    auto clean = trim(line);
-    auto semicolon = clean.find(';');
-    if (semicolon != std::string::npos) clean = clean.substr(0, semicolon);
-    if (clean.empty()) return false;
-    // Security: strtoull saturates at ULLONG_MAX and sets ERANGE, and any size close to
-    // SIZE_MAX makes the caller's `chunk_size + 2` wrap to 1. That skips the fill loop and
-    // hands a huge length to on_chunk, so lengths are rejected here rather than trusted.
-    // 16 MiB is far above any real chunk (CDNs use 4-64 KiB) and still leaves room for +2.
-    constexpr std::size_t kMaxChunkBytes = 16u * 1024u * 1024u;
-    errno = 0;
-    char* end = nullptr;
-    auto value = std::strtoull(clean.c_str(), &end, 16);
-    if (!end || *end != '\0') return false;
-    if (errno == ERANGE || value > kMaxChunkBytes) return false;
-    size = static_cast<std::size_t>(value);
-    return true;
-}
-
 bool stream_chunked_body(int fd,
                          std::string pending,
                          const std::function<bool(const char*, std::size_t)>& on_chunk,
@@ -166,7 +148,7 @@ bool stream_chunked_body(int fd,
         }
 
         std::size_t chunk_size = 0;
-        if (!parse_chunk_size(pending.substr(0, line_end), chunk_size)) return false;
+        if (!httpace::parse_chunk_size(pending.substr(0, line_end), chunk_size)) return false;
         pending.erase(0, line_end + 2);
         if (chunk_size == 0) return true;
 
