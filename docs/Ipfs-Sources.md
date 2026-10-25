@@ -91,6 +91,38 @@ contra: cada versión nueva de la lista es un CID nuevo, así que hay que volver
 La API solo escucha en `127.0.0.1`, de modo que no queda expuesta a la red local: para llegar a ella hay
 que pasar por `adb`.
 
+## IPNS frente a CID, medido
+
+Un **CID** identifica contenido concreto: si cambia la lista, cambia el CID. Un **IPNS** es un nombre
+firmado que apunta a un CID y que su dueño puede reapuntar, así que la URL sigue siendo la misma aunque
+la lista cambie. Esa es toda la diferencia práctica: IPNS se actualiza solo, CID es inmutable.
+
+Medido en la caja con dos nombres IPNS distintos del mismo publicador:
+
+| | Pasarela pública (`ipfs.io`) | Gateway embebido (`127.0.0.1:8080`) |
+|---|---|---|
+| Respuesta | **HTTP 429** en las dos | HTTP 200 |
+| Tiempo | 61-70 ms (rechazo) | 1,7-4,3 s (resolución IPNS) |
+| Canales | — | 151, en 19 grupos |
+
+Los dos nombres IPNS devolvieron **el mismo contenido, byte a byte**: dos nombres para la misma lista.
+
+Y una advertencia que cuesta un rato descubrir: una fuente que apunta a `http://127.0.0.1:8080` **solo
+valida mientras el nodo embebido esté encendido**. Con IPFS apagado, añadir la fuente falla con
+`Failed to connect to /127.0.0.1:8080`. Si la fuente ya estaba guardada, deja de refrescarse hasta que el
+nodo vuelva.
+
+## Dos fuentes a la vez
+
+HaP admite varias fuentes seleccionadas y las fusiona. Medido con una lista local de 388 canales y la
+lista IPNS de 151, que comparten 95 infohashes:
+
+- 539 entradas de origen → **457 canales servidos** → **444 infohashes distintos**.
+- Presentes del archivo local: **388 de 388**. Del IPNS: **151 de 151**.
+
+La deduplicación es por canal, así que tener las dos no duplica nada y sí añade lo que cada una aporta por
+separado.
+
 ## Límite que no cambia con nada de esto
 
 IPFS solo afecta a **la lista**. Los canales dentro de ella siguen apuntando a los servidores del
