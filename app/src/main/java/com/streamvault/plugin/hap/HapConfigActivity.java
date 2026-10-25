@@ -205,6 +205,12 @@ public class HapConfigActivity extends Activity {
     private InPlaceList<ChannelChoice> eventChannelList;
     private Button eventRefreshButton;
     private EventRow chosenEventRow;
+    private ChannelChoiceRow chosenChannelRow;
+    /** The guide already parsed, reused across refreshes. Parsing 34 MB twice for one screen is waste. */
+    private EpgWindow cachedWindow;
+    private long cachedWindowAt;
+    /** The parsed window is only reused for this long: its programmes were selected around a moment. */
+    private static final long WINDOW_REUSE_MILLIS = 30L * 60 * 1000;
     private TextView eventChannelsHeading;
     private List<EventCatalog.Event> currentEvents = new ArrayList<>();
     private final Map<EventSport.Kind, Button> eventFilterButtons =
@@ -1334,6 +1340,12 @@ public class HapConfigActivity extends Activity {
         return chip;
     }
 
+    /** Chips are disabled while the guide is read, so a press cannot race the load. */
+    private void setEventChipsEnabled(boolean enabled) {
+        if (eventFilterAll != null) eventFilterAll.setEnabled(enabled);
+        for (Button chip : eventFilterButtons.values()) chip.setEnabled(enabled);
+    }
+
     /** Keeps only the chosen sport and repaints; null shows everything. */
     private void applyEventFilter(EventSport.Kind kind) {
         eventFilter = kind;
@@ -1432,6 +1444,7 @@ public class HapConfigActivity extends Activity {
     private final class ChannelChoiceRow implements InPlaceList.Row<ChannelChoice> {
         private final TextView view;
         private ChannelChoice choice;
+        private boolean chosen;
 
         ChannelChoiceRow() {
             view = text("", 14, COLOR_TEXT_PRIMARY, Typeface.NORMAL);
@@ -1440,8 +1453,17 @@ public class HapConfigActivity extends Activity {
             view.setPadding(dp(16), 0, 0, 0);
             view.setLayoutParams(matchWrap());
             view.setOnClickListener(v -> {
-                if (choice != null) launchChannel(choice.contentId, choice.name);
+                if (choice == null) return;
+                markChosenChannel(this);
+                launchChannel(choice.contentId, choice.name);
             });
+        }
+
+        void setChosen(boolean isChosen) {
+            if (chosen == isChosen) return;
+            chosen = isChosen;
+            view.setTypeface(Typeface.DEFAULT, isChosen ? Typeface.BOLD : Typeface.NORMAL);
+            if (choice != null) bind(choice);
         }
 
         @Override
@@ -1454,6 +1476,13 @@ public class HapConfigActivity extends Activity {
             choice = item;
             view.setText("▸  " + item.name);
         }
+    }
+
+    /** Marks the channel being played, so the reader sees which one of the list was pressed. */
+    private void markChosenChannel(ChannelChoiceRow row) {
+        if (chosenChannelRow != null && chosenChannelRow != row) chosenChannelRow.setChosen(false);
+        chosenChannelRow = row;
+        if (row != null) row.setChosen(true);
     }
 
     /** Lists the channels that carry {@code event}, so the reader picks one instead of guessing. */
@@ -1536,6 +1565,7 @@ public class HapConfigActivity extends Activity {
             return;
         }
         trigger.setEnabled(false);
+        setEventChipsEnabled(false);
         setEventFeedback(getString(R.string.events_loading));
         list.apply(java.util.Collections.<EventCatalog.Event>emptyList());
 
@@ -1545,9 +1575,14 @@ public class HapConfigActivity extends Activity {
             int matched = 0;
             try {
                 long now = System.currentTimeMillis();
-                GuideRepository.Result result = GuideRepository.load(getCacheDir(), now, false);
-                EpgWindow window = EpgWindow.parse(
-                        new java.io.ByteArrayInputStream(result.xml), now, 3_600_000L, 6 * 3_600_000L);
+                EpgWindow window = cachedWindow;
+                if (window == null || now - cachedWindowAt > WINDOW_REUSE_MILLIS) {
+                    GuideRepository.Result result = GuideRepository.load(getCacheDir(), now, false);
+                    window = EpgWindow.parse(
+                            new java.io.ByteArrayInputStream(result.xml), now, 3_600_000L, 6 * 3_600_000L);
+                    cachedWindow = window;
+                    cachedWindowAt = now;
+                }
                 List<ChannelGuideMatcher.Match> matches = ChannelGuideMatcher.matchAll(
                         plugin.channels,
                         channel -> channel.contentId,
@@ -1568,8 +1603,15 @@ public class HapConfigActivity extends Activity {
             final List<EventCatalog.Event> loaded = events;
             runOnUiThread(() -> {
                 trigger.setEnabled(true);
+                setEventChipsEnabled(true);
                 if (failureMessage != null) {
-                    setEventFeedback(getString(R.string.events_error, failureMessage));
+                    // Two very different failures need two different sentences: nothing cached and no
+                    // network is something the reader can act on, an unreadable guide is not.
+                    String lower = failureMessage.toLowerCase(java.util.Locale.ROOT);
+                    boolean network = lower.contains("http") || lower.contains("timeout")
+                            || lower.contains("connect") || lower.contains("unknownhost");
+                    setEventFeedback(getString(network ? R.string.events_network_error
+                            : R.string.events_error, failureMessage));
                     list.apply(java.util.Collections.<EventCatalog.Event>emptyList());
                     return;
                 }

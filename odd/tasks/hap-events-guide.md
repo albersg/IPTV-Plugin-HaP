@@ -36,3 +36,14 @@
 
 - **L1.** «Pues impleméntalo todo robusto y perfecto», tras pedir «que me salga el Real Madrid - Barcelona
   en los canales acestream que tengo en la apk».
+
+## Refinamiento (sesión nocturna)
+
+- La guía ya parseada se reutiliza 30 minutos: reparsear 34 MB en cada refresco era desperdicio.
+- Los chips se bloquean mientras se lee, para que una pulsación no compita con la carga, y el texto de
+  estado dice qué está pasando.
+- Los fallos se distinguen: sin red y sin copia guardada se avisa de forma distinta a una guía ilegible.
+- El evento elegido se marca en negrita con `▸`, y el canal que se reproduce también.
+
+Pendiente de ver con datos: cargar una lista en el emulador y comprobar los filtros y el recorrido
+evento → canales → reproducir.

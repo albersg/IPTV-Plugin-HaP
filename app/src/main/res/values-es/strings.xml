@@ -394,4 +394,5 @@
     <string name="nav_events">Eventos</string>
     <string name="events_filter_all">Todos</string>
     <string name="events_channels_for">Canales que lo emiten: %1$s</string>
+    <string name="events_network_error">Sin conexión con la guía y nada guardado todavía: %1$s</string>
 </resources>
