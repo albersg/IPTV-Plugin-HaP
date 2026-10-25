@@ -26,12 +26,12 @@ out of scope for a code-only slice; it needs device validation first.
 | ID | Finding | Severity | Surface | Task |
 | --- | --- | --- | --- | --- |
 | F1 | Exported plugin service authorises nobody; any app can start/stop the runtime, enable LAN exposure, and read back stored provider URLs including credentials | CRITICAL | `StreamVaultHapPluginService.java`, manifest | T1 |
-| F2 | LAN mode has no authentication and its only gate trusts the spoofable `X-Forwarded-For` | HIGH | `httpaceproxycpp/src/proxy.cpp` | T2 |
+| F2 | LAN mode has no authentication and its only gate trusts the spoofable `X-Forwarded-For` | HIGH | `httpaceproxycpp/src/proxy.cpp` | **done**, forwarded header trusted only from loopback |
 | F3 | AceStream control-protocol injection: no CR/LF filtering before `write_line` | HIGH | `httpaceproxycpp/src/ace_client.cpp` | **done**, `write_line` refuses control bytes |
 | F4 | Stored XSS in `/stat` dashboard | MEDIUM | `assets/httpaceproxy/http/js/index.js` | **done**, `8a80134` |
 | F5 | `check_peers` opens real P2P sessions outside the concurrency counters | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | T4 |
 | F6 | Unbounded `strtoull` chunk size; `chunk_size + 2` wraps | MEDIUM | `app/src/main/cpp/android_http_client.cpp` | **done**, no regression test yet |
-| F7 | `Access-Control-Allow-Origin: *` on unauthenticated playlist endpoints that carry credentials | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | T6 |
+| F7 | `Access-Control-Allow-Origin: *` on unauthenticated playlist endpoints that carry credentials | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | **done**, wildcard removed |
 | F8 | `--bind-all` may expose the engine's own ports regardless of LAN mode | MEDIUM (hypothesis) | `AceServeRuntime.java` | T7 |
 | F9 | Request targets, stream URLs and provider URLs logged at INFO | LOW/MEDIUM | `proxy.cpp`, `broadcast.cpp`, `StreamVaultHapPluginService.java` | T8 |
 | F10 | Failed-source refresh amplification without a single-flight lock | LOW | `httpaceproxycpp/src/plugins.cpp` | T9 |
@@ -42,11 +42,11 @@ out of scope for a code-only slice; it needs device validation first.
 | ID | Spec | Task | Verification |
 | --- | --- | --- | --- |
 | T1 | S1 | Require a signature-level permission or caller-package allowlist on the exported service; stop returning source URLs from `MSG_GET_CONFIGURATION_VALUES` unless the caller is trusted | Compiles; integration ABI unchanged; needs device/StreamVault check |
-| T2 | S1, S3 | Use the real peer address for both the firewall decision and the client record; ignore client-supplied `X-Forwarded-For` except from a trusted proxy | `native-tests` ctest |
+| T2 | S1, S3 | Use the real peer address for both the firewall decision and the client record; ignore client-supplied `X-Forwarded-For` except from a trusted proxy | **done**, syntax-checked only |
 | T3 | S1, S3 | Reject CR, LF and control bytes for every value concatenated into an engine command | ctest, including a `%0d%0a` case |
 | T4 | S1 | Make `check_peers` sessions count against the concurrency limits | ctest |
 | T5 | S1 | Bound the chunk size; reject sizes beyond a sane maximum before the `+2` | ctest |
-| T6 | S1 | Restrict CORS on playlist endpoints carrying credentials | ctest |
+| T6 | S1 | Restrict CORS on playlist endpoints carrying credentials | **done**, syntax-checked only |
 | T6b | S2 | Do not add proxy authentication (breaks Cast and header-less players) without a device test | decision recorded |
 | T7 | S2 | Resolve `--bind-all` by inspecting the engine's listening sockets on hardware; do not change blind | needs device |
 | T8 | S2 | Stop logging request targets and provider URLs at INFO | review |

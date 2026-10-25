@@ -30,7 +30,6 @@ void send_bytes(ClientConnection& connection, int status, const std::string& con
 
 void send_epg_redirect(ClientConnection& connection, const std::string& url) {
     std::map<std::string, std::string> headers = {
-        {"Access-Control-Allow-Origin", "*"},
         {"Content-Length", "0"},
         {"Location", url},
         {"Connection", "close"}
@@ -239,7 +238,7 @@ bool PlaylistPlugin::handle(RequestContext& ctx) {
     if (ctx.path == "/" + plugin_name_ + "/epg.xml") {
         auto urls = epg_urls();
         if (urls.empty()) {
-            send_bytes(ctx.connection, 200, "application/xml; charset=utf-8", empty_epg_xml(), {{"Access-Control-Allow-Origin", "*"}});
+            send_bytes(ctx.connection, 200, "application/xml; charset=utf-8", empty_epg_xml(), {{}});
         } else {
             send_epg_redirect(ctx.connection, urls.front());
         }
@@ -259,7 +258,7 @@ bool PlaylistPlugin::handle(RequestContext& ctx) {
             return true;
         }
         auto body = playlist_.export_m3u(host_header(ctx), "/" + plugin_name_ + "/channel", ctx.query, true);
-        std::map<std::string, std::string> headers = {{"Access-Control-Allow-Origin", "*"}};
+        std::map<std::string, std::string> headers = {{}};
         if (!etag_.empty() && ctx.request.version == "HTTP/1.1") headers["ETag"] = etag_;
         send_bytes(ctx.connection, 200, "audio/mpegurl; charset=utf-8", body, headers);
     }
@@ -430,7 +429,7 @@ public:
                     return true;
                 }
             }
-            send_bytes(ctx.connection, 200, "application/xml; charset=utf-8", empty_epg_xml(), {{"Access-Control-Allow-Origin", "*"}});
+            send_bytes(ctx.connection, 200, "application/xml; charset=utf-8", empty_epg_xml(), {{}});
             return true;
         }
 

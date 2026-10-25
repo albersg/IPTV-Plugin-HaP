@@ -248,9 +248,32 @@ void Proxy::stop() {
     if (server_) server_->stop();
 }
 
+namespace {
+
+// A client-supplied X-Forwarded-For is attacker-controlled unless the request actually
+// arrived from a local reverse proxy. The firewall used to decide on that header alone, so
+// any LAN client could send "X-Forwarded-For: 192.168.1.10" and be allowed through. Trust it
+// only from loopback, which keeps a local nginx deployment working without opening the gate.
+bool is_loopback_address(const std::string& ip) {
+    return ip == "::1" || ip.rfind("127.", 0) == 0;
+}
+
+std::string effective_client_address(const HttpRequest& request) {
+    if (is_loopback_address(request.client_ip)) {
+        auto forwarded = request.header("x-forwarded-for", "");
+        if (!forwarded.empty()) {
+            auto comma = forwarded.find(',');
+            return trim(comma == std::string::npos ? forwarded : forwarded.substr(0, comma));
+        }
+    }
+    return request.client_ip;
+}
+
+} // namespace
+
 void Proxy::handle_http(const HttpRequest& request, ClientConnection& connection) {
     log_line("INFO", "[" + request.client_ip + "] " + request.method + " " + request.target);
-    if (config_.firewall && !check_firewall(request.header("x-forwarded-for", request.client_ip))) {
+    if (config_.firewall && !check_firewall(effective_client_address(request))) {
         send_error(connection, 401, "Dropping connection due to firewall rules");
         return;
     }
@@ -378,7 +401,7 @@ void Proxy::handle_core_stream(RequestContext& ctx) {
 
         auto broadcast = broadcasts_.get_or_create(infohash, params);
         auto client = broadcast->add_client(
-            ctx.request.header("x-forwarded-for", ctx.request.client_ip),
+            effective_client_address(ctx.request),
             ctx.request.header("user-agent", ""),
             channel_name,
             ctx.channel_icon);
