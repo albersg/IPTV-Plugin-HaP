@@ -397,6 +397,11 @@ public class HapConfigActivity extends Activity {
         focusNavigator = new FocusNavigator(findViewById(R.id.hap_root), navRail, sectionContainer);
         focusNavigator.attach();
         showSection(HapSections.Section.INICIO, false);
+        // A television screen has to open with visible focus. Without it the screen showed no
+        // highlight at all and the first D-pad press was spent establishing one, which reads as a
+        // dead remote. Posted so the rail is measured before the entry takes the focus.
+        final FocusNavigator startNavigator = focusNavigator;
+        navRail.post(() -> startNavigator.focusRailItem(HapSections.Section.INICIO));
     }
 
     /** Wires the five section entries to their section, in {@link HapSections.Section} order. */
