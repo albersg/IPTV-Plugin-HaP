@@ -34,7 +34,10 @@ real benefit; the decision was left to the human.
 source is configured on the box, so the streaming path has not been exercised since the shell was
 rewritten. This is the most important open verification.
 
-**V2 — BACK and focus memory, section by section.** BACK from each section returns to Inicio and the
+**V2 — BACK and focus memory, section by section.** BACK returning to Inicio is confirmed on the
+device. The per-section anchor was attempted and the test was inconclusive: activating a rail entry
+leaves focus on the rail by design, so the check has to move focus into the section first, then leave
+and come back. Still owed. BACK from each section returns to Inicio and the
 per-section focus anchor restores the last control. Both are covered by unit tests and by the
 navigation seen on device, but the round trip per section has not been walked.
 
@@ -107,9 +110,13 @@ a live tree is dropped. Both would be fixed in `FocusNavigator`, not in the pane
 Until this is fixed and re-verified, the decision to keep Android Views is **not** discharged: the
 reviewer's condition was that navigation and focus demonstrably pass, and they do not yet.
 
-- **`Ajustes` shows an empty card.** The advanced IPFS section renders as a large empty surface with
-  only a "+ Avanzado" label above it, and "+ Log" sits inside it. Collapsed sections should not leave
-  a hole.
+- **Collapsed panels render as empty cards, and this is systemic, not cosmetic.** `Canales` consists
+  of a single "+ Estado de canales" card that fills most of the screen with nothing in it; `Ajustes`
+  shows "+ Avanzado" above a large empty surface with "+ Log" inside it. The collapsible panels kept
+  their header and lost their body, so a section can look like an empty shell. A user opening
+  `Canales` sees no explanation of what the section is for and no way in except the header. This is
+  the most visible remaining flaw after the D-pad, and it needs the collapse mechanism to carry a
+  summary line when closed.
 - **The gear icon reads as a blob** at rail size; the path needs simplifying.
 - **`Canales`, `Fuentes` and `Ajustes` have not been reviewed visually**, only `Inicio` and
   `Conexiones`. The Fuentes empty state is two buttons and a lot of nothing.
