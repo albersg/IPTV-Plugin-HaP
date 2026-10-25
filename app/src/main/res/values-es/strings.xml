@@ -146,6 +146,8 @@
     <string name="message_no_lists_available">No hay listas disponibles.</string>
     <string name="message_select_channel_first">Selecciona un canal primero.</string>
     <string name="message_select_list_first">Carga y selecciona una lista primero.</string>
+    <string name="message_watching_channel">Abriendo %1$s en el reproductor...</string>
+    <string name="error_no_video_player">Ninguna aplicación de este dispositivo reproduce streams de vídeo.</string>
     <string name="message_testing_channel">Probando %1$s...</string>
     <string name="message_testing_list_progress">Probando %1$s... %2$d/%3$d</string>
     <string name="message_list_test_complete">Test de lista completado.</string>

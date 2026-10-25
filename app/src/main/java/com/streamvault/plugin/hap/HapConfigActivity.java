@@ -3060,10 +3060,45 @@ public class HapConfigActivity extends Activity {
     }
 
     /** Selecting a channel row marks it and checks its peers, exactly as the rebuilt rows did. */
+    /**
+     * One tap tests a channel, the next one watches it.
+     *
+     * <p>Before this, a tap only ever selected and checked peers: the channel never opened, which is
+     * what "le doy al canal y no se me abre" described. A channel already checked and found working
+     * now hands the stream to a player, and one that is untested or failed is checked again, because
+     * that is what the user needs from it in that state.
+     */
     private void selectChannel(HapRows.Channel channel) {
         selectedChannelContentId = channel.contentId;
+        HapBridge.PeerResultInfo result = peerResults.get(channel.contentId);
         renderChannels();
+        if (result != null && result.available) {
+            watchChannel(channel);
+            return;
+        }
         checkChannel(channel.contentId, channel.name);
+    }
+
+    /**
+     * Hands the channel to a player.
+     *
+     * <p>The proxy serves the channel as an MPEG-TS stream and starts the broadcast on the first
+     * request, so opening its URL is the whole of launching an AceStream channel. The player is
+     * whichever app on the device answers {@code video/mp2t}; the television in the reference setup has
+     * AceStream's own app for it.
+     */
+    private void watchChannel(HapRows.Channel channel) {
+        if (channel.contentId == null || channel.contentId.trim().isEmpty()) return;
+        String url = HapBridge.channelUrl(channel.contentId, channel.name);
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(Uri.parse(url), "video/mp2t");
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(intent);
+            renderChannelFeedback(getString(R.string.message_watching_channel, channel.name));
+        } catch (ActivityNotFoundException e) {
+            renderChannelFeedback(getString(R.string.error_no_video_player));
+        }
     }
 
     private void renderChannelFeedback(String message) {

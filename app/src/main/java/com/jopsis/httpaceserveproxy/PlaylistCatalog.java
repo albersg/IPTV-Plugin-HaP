@@ -226,6 +226,21 @@ final class PlaylistCatalog {
         return baseUrl + "/aio/epg.xml";
     }
 
+    /**
+     * The URL that plays one channel through this app's proxy. The proxy starts the broadcast for that
+     * content id on first request, so opening this URL is all "launch the channel" needs to be.
+     */
+    static String channelUrl(String contentId, String channelName) {
+        String name = channelName == null || channelName.trim().isEmpty() ? "stream" : channelName.trim();
+        String encoded;
+        try {
+            encoded = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20");
+        } catch (Exception e) {
+            encoded = "stream";
+        }
+        return BASE_URL + "/content_id/" + contentId + "/" + encoded + ".ts";
+    }
+
     static String sourceUrl(String id) {
         return sourceUrl(BASE_URL, id);
     }

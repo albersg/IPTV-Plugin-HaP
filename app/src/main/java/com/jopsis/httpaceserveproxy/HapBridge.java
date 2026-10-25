@@ -300,6 +300,11 @@ public final class HapBridge {
         saveSelectedSources(context, current);
     }
 
+    /** The playable URL of one channel, served by the local proxy. */
+    public static String channelUrl(String contentId, String channelName) {
+        return PlaylistCatalog.channelUrl(contentId, channelName);
+    }
+
     public static SaveResult saveSource(Context context, String sourceId, String rawValue) {
         PlaylistCatalog.Source source = PlaylistCatalog.sourceFor(context, sourceId);
         if (source == null) return new SaveResult(false, context.getString(R.string.error_unknown_source));
