@@ -173,7 +173,8 @@ final class AceServeRuntime {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     ServiceState.appendLog("ace: " + line);
-                    Log.i(TAG, line);
+                    // Security: engine output carries content ids and upstream URLs, and logcat
+                    // is harvested by bug reports. It stays in the bounded in-app log instead.
                 }
                 try {
                     Log.i(TAG, "process output ended exit=" + current.waitFor());
