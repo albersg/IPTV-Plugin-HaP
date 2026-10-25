@@ -183,12 +183,16 @@ public final class HomeScreen {
         content.addView(servicesHeading, top(matchWrap(), R.dimen.hap_gap_block));
 
         LinearLayout servicesCard = card(false, 0);
+        // The approved layout sets the three services side by side, divided by hairlines,
+        // rather than stacked: the whole row is readable in one glance from the sofa.
+        LinearLayout servicesRow = row(Gravity.TOP);
         aceServeStateView = addServiceRow(
-                servicesCard, R.string.label_aceserve, R.string.service_aceserve_detail);
+                servicesRow, R.string.label_aceserve, R.string.service_aceserve_detail);
         proxyStateView = addServiceRow(
-                servicesCard, R.string.service_proxy_name, R.string.service_proxy_detail);
+                servicesRow, R.string.service_proxy_name, R.string.service_proxy_detail);
         ipfsStateView = addServiceRow(
-                servicesCard, R.string.service_ipfs_name, R.string.service_ipfs_detail);
+                servicesRow, R.string.service_ipfs_name, R.string.service_ipfs_detail);
+        servicesCard.addView(servicesRow, matchWrap());
         content.addView(servicesCard, top(matchWrap(), R.dimen.hap_gap_row));
 
         root = new ScrollView(activity);
@@ -252,6 +256,22 @@ public final class HomeScreen {
     private void bindStateWord(TextView view, HapServiceStates.ServiceState state) {
         view.setText(stateWord(state));
         view.setTextColor(color(stateColor(state)));
+        view.setCompoundDrawablesWithIntrinsicBounds(stateDot(state), 0, 0, 0);
+    }
+
+    /** The dot beside a service state, so the word is not the only signal. */
+    private static int stateDot(HapServiceStates.ServiceState state) {
+        switch (state) {
+            case ACTIVE:
+            case ACTIVE_FEMININE:
+                return R.drawable.dot_status_ok;
+            case STARTING:
+                return R.drawable.dot_status_warning;
+            case ERROR:
+                return R.drawable.dot_status_error;
+            default:
+                return R.drawable.dot_status_off;
+        }
     }
 
     private static int stateWord(HapServiceStates.ServiceState state) {
@@ -351,26 +371,43 @@ public final class HomeScreen {
         }
     }
 
+    /**
+     * One service column: its name, then the state with a coloured dot beside it, then the muted
+     * detail. Columns sit side by side, separated by a hairline.
+     */
     private TextView addServiceRow(LinearLayout card, int nameRes, int detailRes) {
-        LinearLayout row = row(Gravity.CENTER_VERTICAL);
-        if (card.getChildCount() > 0) {
-            row.setPadding(0, space(R.dimen.hap_gap_row), 0, 0);
-        }
+        if (card.getChildCount() > 0) card.addView(verticalDivider());
 
-        LinearLayout left = column();
-        left.addView(label(nameRes, R.style.TextAppearance_HaP_Body), matchWrap());
-        TextView detail = label(detailRes, R.style.TextAppearance_HaP_Caption);
-        detail.setPadding(0, space(R.dimen.hap_gap_row), 0, 0);
-        left.addView(detail, matchWrap());
-        row.addView(left, weight(1f, 0));
+        LinearLayout column = column();
+        column.addView(label(nameRes, R.style.TextAppearance_HaP_Body), matchWrap());
 
         TextView state = label(0, R.style.TextAppearance_HaP_Body);
-        state.setGravity(Gravity.END);
         state.setTextColor(color(R.color.hap_text_muted));
-        row.addView(state, wrapWrap());
+        state.setPadding(0, space(R.dimen.hap_gap_row), 0, 0);
+        state.setCompoundDrawablePadding(space(R.dimen.hap_gap_row));
+        state.setCompoundDrawablesWithIntrinsicBounds(R.drawable.dot_status_off, 0, 0, 0);
+        column.addView(state, matchWrap());
 
-        card.addView(row, matchWrap());
+        TextView detail = label(detailRes, R.style.TextAppearance_HaP_Caption);
+        detail.setPadding(0, space(R.dimen.hap_gap_row), 0, 0);
+        column.addView(detail, matchWrap());
+
+        card.addView(column, weight(1f, 0));
         return state;
+    }
+
+    /** The hairline between two service columns. */
+    private View verticalDivider() {
+        View divider = new View(activity);
+        divider.setBackgroundColor(color(R.color.hap_hairline));
+        int width = Math.max(1, Math.round(
+                activity.getResources().getDisplayMetrics().density));
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(width, LinearLayout.LayoutParams.MATCH_PARENT);
+        int gap = space(R.dimen.hap_gap_block);
+        params.setMargins(gap, 0, gap, 0);
+        divider.setLayoutParams(params);
+        return divider;
     }
 
     private void addCardText(LinearLayout card, int titleRes, int subtitleRes) {
