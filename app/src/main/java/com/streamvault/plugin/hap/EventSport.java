@@ -37,10 +37,17 @@ public final class EventSport {
         }
     }
 
+    /**
+     * Words that name a competition but not a sport. "Grand Prix" is motor racing and also a tennis round,
+     * "copa" is football and also climbing, "jornada" is any of them. They only decide when nothing stronger
+     * is named, which is what stops "Tennis: ATP 250 - Grand Prix" from being classified as motor racing.
+     */
+    private static final Map<Kind, String[]> WEAK = new LinkedHashMap<>();
+
     /** Sports the filter does not break out: they belong under "Otros", not under a wrong one. */
     private static final String[] OTHER_SPORTS = {
-            "rugby", "balonmano", "hockey", "golf", "atletismo", "boxeo", "premier padel", "padel",
-            "cricket", "béisbol",
+            "rugby", "balonmano", "hockey", "golf", "dp world tour", "pga", "atletismo", "boxeo",
+            "premier padel", "padel", "escalada", "cricket", "béisbol",
             "beisbol", "voleibol", "voley", "waterpolo"
     };
 
@@ -48,7 +55,7 @@ public final class EventSport {
 
     static {
         KEYWORDS.put(Kind.FUTBOL, new String[]{
-                "futbol", "fútbol", "laliga", "liga", "champions", "copa", "uefa", "europa league",
+                "futbol", "fútbol", "laliga", "champions", "uefa", "europa league",
                 "soccer", "premier", "serie a", "bundesliga", "ligue 1", "clasico", "derbi", "nfl"
         });
         KEYWORDS.put(Kind.BALONCESTO, new String[]{
@@ -56,7 +63,7 @@ public final class EventSport {
         });
         KEYWORDS.put(Kind.MOTOR, new String[]{
                 "motogp", "moto2", "moto3", "formula 1", "formula e", "f1", "f2", "f3",
-                "grand prix", "gran premio", "rally", "dakar", "nascar", "indycar", "gp"
+                "rally", "dakar", "nascar", "indycar"
         });
         KEYWORDS.put(Kind.TENIS, new String[]{
                 "tenis", "tennis", "atp", "wta", "wimbledon", "roland garros", "us open", "australian open"
@@ -85,6 +92,11 @@ public final class EventSport {
 
     static {
         KEYWORDS.put(Kind.OTROS, OTHER_SPORTS);
+    }
+
+    static {
+        WEAK.put(Kind.MOTOR, new String[]{"grand prix", "gran premio", "gp"});
+        WEAK.put(Kind.FUTBOL, new String[]{"copa", "jornada", "liga"});
     }
 
     /**
@@ -117,6 +129,13 @@ public final class EventSport {
             }
         }
         if (best != null) return best;
+
+        // No sport named: a competition name may still place it, but it never overrides one that did.
+        for (Map.Entry<Kind, String[]> entry : WEAK.entrySet()) {
+            for (String keyword : entry.getValue()) {
+                if (haystack.contains(" " + squash(keyword) + " ")) return entry.getKey();
+            }
+        }
 
         // Nothing specific named: a generic word may still say what it is.
         for (Map.Entry<String, Kind> entry : GENERIC.entrySet()) {

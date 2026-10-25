@@ -90,6 +90,23 @@ public class EventSportTest {
     }
 
     @Test
+    public void aSportNameBeatsACompetitionNameEvenWhenTheCompetitionIsLonger() {
+        // All three were on screen classified wrongly; the titles are copied from the emulator.
+        assertEquals(EventSport.Kind.TENIS, EventSport.classify(
+                "Tennis: ATP 250 · Finale, Grand Prix Auvergne-Rhone-Alpes in Lyon (F), Finale"));
+        assertEquals(EventSport.Kind.OTROS, EventSport.classify(
+                "DP World Tour T25/26 · Genesis Championship. Jornada 4. Parte 2"));
+        assertEquals(EventSport.Kind.OTROS, EventSport.classify(
+                "DIRECTO Dificultad - Finales T2026 · Copa del mundo de escalada - Santiago de Chile"));
+    }
+
+    @Test
+    public void aCompetitionNameStillClassifiesWhenNothingElseDoes() {
+        assertEquals(EventSport.Kind.MOTOR, EventSport.classify("GP de Estados Unidos · Previo"));
+        assertEquals(EventSport.Kind.FUTBOL, EventSport.classify("Jornada 10: Barcelona - Real Madrid"));
+    }
+
+    @Test
     public void everyKindHasALabelForTheFilter() {
         for (EventSport.Kind kind : EventSport.Kind.values()) {
             org.junit.Assert.assertFalse(kind.label().trim().isEmpty());

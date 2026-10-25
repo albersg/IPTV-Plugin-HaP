@@ -3839,9 +3839,14 @@ public class HapConfigActivity extends Activity {
         workExecutor.execute(() -> {
             try {
                 HapBridge.start(this);
-                boolean ready = HapBridge.waitForProxyReady(90_000);
-                if (!ready) throw new IllegalStateException(getString(R.string.message_aio_timeout));
-                List<HapBridge.PluginChannelsInfo> plugins = HapBridge.channelPlugins(this);
+                // A short wait: browsing and the events screen read the playlist file directly, so there is
+                // no reason to block for a minute and a half on an engine that may never come up.
+                boolean ready = HapBridge.waitForProxyReady(5_000);
+                List<HapBridge.PluginChannelsInfo> plugins =
+                        ready ? HapBridge.channelPlugins(this) : localChannelPlugins();
+                if (plugins.isEmpty() && ready) {
+                    throw new IllegalStateException(getString(R.string.message_no_lists_available));
+                }
                 main(() -> {
                     channelPlugins = plugins;
                     selectedPluginId = plugins.isEmpty() ? null : plugins.get(0).id;
@@ -3855,6 +3860,23 @@ public class HapConfigActivity extends Activity {
                 main(() -> renderChannelFeedback(errorMessage(error)));
             }
         });
+    }
+
+    /**
+     * The playlist files this device holds, read directly, as a channel list that needs no engine.
+     *
+     * <p>This is what lets the channel list and the events screen work before the server starts, and on a
+     * machine where the engine cannot start at all.
+     */
+    private List<HapBridge.PluginChannelsInfo> localChannelPlugins() {
+        List<File> files = LocalListFiles.scan(LocalListFiles.folder(this));
+        List<HapBridge.PluginChannelsInfo> plugins = new ArrayList<>();
+        for (File file : files) {
+            HapBridge.PluginChannelsInfo plugin =
+                    HapBridge.channelsFromPlaylist(file.getAbsolutePath(), file.getName(), file);
+            if (!plugin.channels.isEmpty()) plugins.add(plugin);
+        }
+        return plugins;
     }
 
     private void checkChannel(String contentId, String channelName) {

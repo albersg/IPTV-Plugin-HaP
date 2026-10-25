@@ -77,6 +77,22 @@ public final class HapBridge {
      * That makes a failed engine silent unless something can read the in-app log, which is what this is
      * for: the debug tool prints it, and the settings screen shows it.
      */
+    /**
+     * Builds the channel list from a playlist file, without the proxy.
+     *
+     * <p>The list normally comes from the local proxy, so it only exists once the engine runs. Browsing and
+     * the events screen do not need the engine at all, so this reads the file directly: the channel list is
+     * available before the server starts, and on a machine where the engine cannot start.
+     */
+    public static PluginChannelsInfo channelsFromPlaylist(String id, String label, java.io.File file) {
+        List<ChannelInfo> channels = new ArrayList<>();
+        for (com.streamvault.plugin.hap.M3uParser.Entry entry
+                : com.streamvault.plugin.hap.M3uParser.parse(file)) {
+            channels.add(new ChannelInfo(entry.name, entry.contentId));
+        }
+        return new PluginChannelsInfo(id, label, channels);
+    }
+
     public static String logDump() {
         return ServiceState.log();
     }
