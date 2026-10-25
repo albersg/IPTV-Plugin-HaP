@@ -26,6 +26,7 @@
 - **T1 — `ChannelGuideMatcher`** con las cuatro capas y tests puros. Sin red, sin Android. **(hecho)**
 - **T2 — `EpgWindow`**: parseo en streaming del XMLTV y ventana temporal. **(hecho)** La caché en
   disco queda para T3.
+- **Caché en disco de la guía** — `GuideCache`, 7 tests. **(hecho)** Falta conectarla a la descarga y a la pantalla.
 - **T3 — Eventos**: agrupación por título y número de canales. **(datos hechos)** Faltan la caché en
   disco de la guía y la pantalla.
 - **T4 — Evento → filtrar → sonda ligera → orden por calidad → reproducir.**
