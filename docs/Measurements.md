@@ -79,3 +79,42 @@ interface by default, and it must accept inbound peers to work at all. The flag 
   since the interface was rewritten. This is the most important missing verification.
 - **Memory over a long session.** Only the serving steady state was sampled, not an hour of playback.
 - **720p overscan.** Only the 1080p override was tested.
+
+## Guía de eventos, con el fichero real y la lista real
+
+Medido con `guiatv.xml` (34.771.430 B, la guía que la app consulta), la lista del usuario
+(`lista-unificada.m3u`, 388 canales) y el código de producción (`EpgWindow` → `ChannelGuideMatcher` →
+`EventCatalog`), sobre una JVM con `-Xmx256m` para no darle más holgura que la que tiene el dispositivo.
+
+| Medida | Valor | Cómo se obtuvo |
+| --- | --- | --- |
+Guía descargada | 34.771.430 B | `curl`, coincide con la medición anterior |
+Canales de la guía | 642 | `window.channels().size()` |
+Programas en el fichero | 83.073 | medición previa sobre el XML completo |
+Programas retenidos en la ventana (−1 h, +6 h) | **4.486** | `window.programmes().size()` |
+De ellos, en emisión ahora | 578 | `window.onNow(now)` |
+Tiempo de parseo completo | **766 ms** | reloj de pared, incluye descarga desde disco |
+Memoria usada al terminar | **64 MB** | `totalMemory() − freeMemory()` con tope de 256 MB |
+Canales de la lista emparejados con la guía | **93 de 388** | `matchAll(...).size()` |
+Tiempo de emparejamiento | 319 ms | reloj de pared |
+Eventos en emisión ahora | **43** | `EventCatalog.onNow(...)` |
+
+Lectura: el parser deja **4.486 de 83.073** programas (5,4 %), que es exactamente lo que pretende —la
+ventana decide cuánto se guarda, no el tamaño del fichero— y lo hace en menos de un segundo gastando 64 MB,
+dentro de lo que aguanta el dispositivo.
+
+Los 93 emparejamientos son más que los 75 estimados antes porque aquí se ejercitan las cuatro capas del
+emparejador, no solo la de nombre normalizado.
+
+Ejemplo real de la salida, con la clasificación de deporte aplicada al título:
+
+```
+Sun Oct 25 11:00:00 CET 2026 | M+ LALIGA 3                  | canales=2 | FUTBOL
+Sun Oct 25 11:00:00 CET 2026 | M+ Liga de Campeones 3        | canales=2 | FUTBOL
+Sun Oct 25 08:00:00 CET 2026 | M+ Baloncesto 3               | canales=1 | BALONCESTO
+Sun Oct 25 09:00:00 CET 2026 | M+ Deportes 4                 | canales=2 | null
+```
+
+No medido aquí: el mismo recorrido **en la caja**. Esta medición es de escritorio; el APK de debug no se
+instaló sobre el de release porque llevan firmas distintas y desinstalar habría borrado las fuentes del
+usuario. Queda pendiente medirlo en el dispositivo.
