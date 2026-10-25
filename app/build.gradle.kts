@@ -110,6 +110,10 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     buildTypes {
         getByName("release") {
             if (hasReleaseSigningConfig) {
@@ -130,6 +134,8 @@ dependencies {
     // Java with no android.* imports, so it is tested on the JVM instead of on a
     // device. Everything else in this app still needs a device or Robolectric.
     testImplementation(libs.junit)
+    // Test-only: runs the real layouts and key events on the JVM, no device needed.
+    testImplementation(libs.robolectric)
 }
 
 tasks.register("checkIpfsBinaries") {

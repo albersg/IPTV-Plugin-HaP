@@ -13,6 +13,7 @@
 agp = "8.10.1"
 
 [libraries]
+robolectric = { module = "org.robolectric:robolectric", version = "4.14.1" }
 core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.18.0" }
 
 # The channel list is the one list long enough to keep a viewport instead of every row in memory,
