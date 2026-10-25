@@ -41,7 +41,7 @@ out of scope for a code-only slice; it needs device validation first.
 
 | ID | Spec | Task | Verification |
 | --- | --- | --- | --- |
-| T1 | S1 | Require a signature-level permission or caller-package allowlist on the exported service; stop returning source URLs from `MSG_GET_CONFIGURATION_VALUES` unless the caller is trusted | Compiles; integration ABI unchanged; needs device/StreamVault check |
+| T1 | S1 | Require a caller check on the exported service; stop returning source URLs from `MSG_GET_CONFIGURATION_VALUES` unless the caller is trusted | BLOCKED: the host package is unknown (see L5) |
 | T2 | S1, S3 | Use the real peer address for both the firewall decision and the client record; ignore client-supplied `X-Forwarded-For` except from a trusted proxy | **done**, syntax-checked only |
 | T3 | S1, S3 | Reject CR, LF and control bytes for every value concatenated into an engine command | ctest, including a `%0d%0a` case |
 | T4 | S1 | Make `check_peers` sessions count against the concurrency limits | ctest |
@@ -68,3 +68,32 @@ exposes only three `.py` entries, so the flag's semantics could not be read offl
 
 **L3 — constraint.** No device is connected during this work, so anything touching sockets,
 binding or player compatibility is recorded as pending verification, not as done.
+
+**L5 — why F1 is not fixed yet, and the exact way in.** The critical finding is the exported plugin
+service: any app can bind `com.streamvault.plugin.API` and drive the runtime, and
+`MSG_GET_CONFIGURATION_VALUES` hands back the stored provider URLs. Three fixes were considered and
+only one is safe, and it needs one fact this repository does not contain.
+
+A signature-level permission is wrong here. This fork is signed with the human's own key
+(`~/hap-signing/release.jks`), while StreamVault is signed with jopsis's, so a signature check would
+refuse the very caller the plugin exists to serve. A manifest `android:permission` is also wrong for
+the same reason: the client would have to declare `uses-permission` in *its* manifest, which is not
+ours to change.
+
+The workable design is a caller allowlist by package name, because an installed package name cannot
+be taken over by another app on the same device. That requires the host's package name, and the
+repository does not record it: `StreamVaultHapPluginService` learns nothing about its caller, and the
+manifest describes the plugin's own identity (`com.streamvault.plugins.hap`), not the host's.
+Guessing a prefix and shipping it would break the integration silently.
+
+The morning action is one command, then the fix is mechanical:
+
+```bash
+ADB=/mnt/c/Users/alber/hap-tools/platform-tools/adb.exe
+$ADB shell pm list packages | grep -i streamvault
+```
+
+That yields the host package(s). With them, `Binder.getCallingUid()` plus
+`getPackageManager().getNameForUid` gives a caller identity, and the service can allow the host and
+its own UID while redacting source URLs and refusing LAN enablement for everyone else. Until then
+F1 remains open, and it is the highest-severity item on this branch.
