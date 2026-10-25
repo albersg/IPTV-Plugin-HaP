@@ -29,21 +29,21 @@ out of scope for a code-only slice; it needs device validation first.
 | F2 | LAN mode has no authentication and its only gate trusts the spoofable `X-Forwarded-For` | HIGH | `httpaceproxycpp/src/proxy.cpp` | **done**, forwarded header trusted only from loopback |
 | F3 | AceStream control-protocol injection: no CR/LF filtering before `write_line` | HIGH | `httpaceproxycpp/src/ace_client.cpp` | **done**, `write_line` refuses control bytes |
 | F4 | Stored XSS in `/stat` dashboard | MEDIUM | `assets/httpaceproxy/http/js/index.js` | **done**, `8a80134` |
-| F5 | `check_peers` opens real P2P sessions outside the concurrency counters | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | T4 |
+| F5 | `check_peers` opens real P2P sessions outside the concurrency counters | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | **done**, capped at two concurrent checks |
 | F6 | Unbounded `strtoull` chunk size; `chunk_size + 2` wraps | MEDIUM | `app/src/main/cpp/android_http_client.cpp` | **done**, no regression test yet |
 | F7 | `Access-Control-Allow-Origin: *` on unauthenticated playlist endpoints that carry credentials | MEDIUM | `httpaceproxycpp/src/plugins.cpp` | **done**, wildcard removed |
 | F8 | `--bind-all` may expose the engine's own ports regardless of LAN mode | **REFUTED by measurement** | `AceServeRuntime.java` | T7 (closed) |
-| F9 | Request targets, stream URLs and provider URLs logged at INFO | LOW/MEDIUM | `proxy.cpp`, `broadcast.cpp`, `StreamVaultHapPluginService.java` | T8 |
-| F10 | Failed-source refresh amplification without a single-flight lock | LOW | `httpaceproxycpp/src/plugins.cpp` | T9 |
-| F11 | EOL jQuery 3.3.1 / Bootstrap 4.1.1 served from `/stat`; no third-party notice file | LOW | `assets/httpaceproxy/http/` | T10 |
+| F9 | Request targets, stream URLs and provider URLs logged at INFO | LOW/MEDIUM | `proxy.cpp`, `broadcast.cpp`, `StreamVaultHapPluginService.java` | **done** (native in `5325288`, Java with D1) |
+| F10 | Failed-source refresh amplification without a single-flight lock | LOW | `httpaceproxycpp/src/plugins.cpp` | **done**, mutex plus 30 s failure backoff |
+| F11 | EOL jQuery 3.3.1 / Bootstrap 4.1.1 served from `/stat`; no third-party notice file | LOW | `assets/httpaceproxy/http/` | **notice written**; upgrade deferred with a trigger |
 
 ## Tasks
 
 | ID | Spec | Task | Verification |
 | --- | --- | --- | --- |
 | T1 | S1 | Require a caller check on the exported service; stop returning source URLs from `MSG_GET_CONFIGURATION_VALUES` unless the caller is trusted | BLOCKED: the host package is unknown (see L5) |
-| T2 | S1, S3 | Use the real peer address for both the firewall decision and the client record; ignore client-supplied `X-Forwarded-For` except from a trusted proxy | **done**, syntax-checked only |
-| T3 | S1, S3 | Reject CR, LF and control bytes for every value concatenated into an engine command | ctest, including a `%0d%0a` case |
+| T2 | S1, S3 | Use the real peer address for both the firewall decision and the client record; ignore client-supplied `X-Forwarded-For` except from a trusted proxy | **done and tested**, `f9e0612` |
+| T3 | S1, S3 | Reject CR, LF and control bytes for every value concatenated into an engine command | **done and tested**, `f9e0612` |
 | T4 | S1 | Make `check_peers` sessions count against the concurrency limits | ctest |
 | T5 | S1 | Bound the chunk size; reject sizes beyond a sane maximum before the `+2` | ctest |
 | T6 | S1 | Restrict CORS on playlist endpoints carrying credentials | **done**, syntax-checked only |
@@ -129,3 +129,8 @@ What this means, stated plainly:
 
 Nothing about the P2P design changed, so the earlier statement stands: an app inside HaP cannot hide
 the user's address from the swarm.
+
+**L7 — the audit's tail closed.** F5, F9, F10 and F11 landed in `5325288`; F2 and F3 gained real
+tests in `f9e0612`, each checked against a deliberately broken build so they are not decorative. F7
+has no logic to pin: removing four headers is a review matter. F6 was pinned earlier. What remains
+open is F1, and it waits on a human decision rather than on missing evidence.
