@@ -10,6 +10,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <condition_variable>
 #include <mutex>
 #include <string>
 
@@ -59,6 +60,9 @@ private:
     // Peer checks open a real P2P session each and never enter BroadcastManager, so the channel
     // and connection limits do not see them. This bounds them on their own.
     std::atomic<int> peer_checks_{0};
+    // Guards the peer-check gate: a check waits here for a free slot instead of being refused.
+    std::mutex peer_check_mutex_;
+    std::condition_variable peer_check_cv_;
 };
 
 } // namespace httpace

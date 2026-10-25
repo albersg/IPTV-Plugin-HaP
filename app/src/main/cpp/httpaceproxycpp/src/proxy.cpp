@@ -643,27 +643,40 @@ Json Proxy::check_channel_peers(const std::string& content_id, int max_wait, con
     if (content_id.empty()) return Json::object{{"status", "error"}, {"error", "content_id required"}};
     // Security: a peer check starts a broadcast and polls it for seconds. The channel and connection
     // limits do not cover it, so without this cap one LAN host could hold dozens of P2P sessions open.
+    // The cap stays: it is what keeps one LAN host from holding many P2P sessions open. What changed
+    // is the answer to a full gate. Refusing outright is what a user saw as "too many concurrent peer
+    // checks" the moment they tapped a channel while a batch was running. A request now waits for a
+    // slot for as long as its own poll would have taken, so the number of live sessions is the same
+    // and a burst is queued instead of dropped.
     constexpr int kMaxConcurrentPeerChecks = 2;
-    struct PeerCheckSlot {
-        std::atomic<int>& counter;
-        bool taken;
-        explicit PeerCheckSlot(std::atomic<int>& c) : counter(c) {
-            int current = counter.load();
-            taken = false;
-            while (current < kMaxConcurrentPeerChecks) {
-                if (counter.compare_exchange_weak(current, current + 1)) {
-                    taken = true;
-                    break;
-                }
+    const auto slot_deadline = std::chrono::steady_clock::now() +
+                               std::chrono::seconds(std::max(1, max_wait));
+    {
+        std::unique_lock<std::mutex> lock(peer_check_mutex_);
+        while (peer_checks_.load() >= kMaxConcurrentPeerChecks) {
+            if (connection && connection->peer_closed()) {
+                return Json::object{{"status", "error"}, {"error", "client disconnected"}};
+            }
+            if (peer_check_cv_.wait_until(lock, slot_deadline) == std::cv_status::timeout) {
+                return Json::object{{"status", "error"}, {"error", "peer checks busy, try again later"}};
             }
         }
-        ~PeerCheckSlot() {
-            if (taken) counter.fetch_sub(1);
-        }
-    } slot(peer_checks_);
-    if (!slot.taken) {
-        return Json::object{{"status", "error"}, {"error", "too many concurrent peer checks, try again later"}};
+        peer_checks_.fetch_add(1);
     }
+    struct PeerCheckSlot {
+        std::atomic<int>& counter;
+        std::mutex& mutex;
+        std::condition_variable& cv;
+        PeerCheckSlot(std::atomic<int>& c, std::mutex& m, std::condition_variable& v)
+            : counter(c), mutex(m), cv(v) {}
+        ~PeerCheckSlot() {
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                counter.fetch_sub(1);
+            }
+            cv.notify_one();
+        }
+    } slot(peer_checks_, peer_check_mutex_, peer_check_cv_);
     try {
         AceClient ace(config_, "PeerCheck_" + content_id.substr(0, 8));
         // RAII: any exit path (success, timeout, client disconnect, exception) stops the
