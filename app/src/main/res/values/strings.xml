@@ -391,4 +391,5 @@
     </plurals>
     <string name="nav_events">Events</string>
     <string name="events_filter_all">All</string>
+    <string name="events_channels_for">Channels showing this: %1$s</string>
 </resources>

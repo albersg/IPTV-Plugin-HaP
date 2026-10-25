@@ -202,6 +202,8 @@ public class HapConfigActivity extends Activity {
     private InPlaceList<HapRows.CustomChannel> customChannelList;
     private TextView eventFeedbackView;
     private InPlaceList<EventCatalog.Event> eventListRef;
+    private InPlaceList<ChannelChoice> eventChannelList;
+    private TextView eventChannelsHeading;
     private List<EventCatalog.Event> currentEvents = new ArrayList<>();
     private final Map<EventSport.Kind, Button> eventFilterButtons =
             new java.util.EnumMap<>(EventSport.Kind.class);
@@ -1374,6 +1376,17 @@ public class HapConfigActivity extends Activity {
         eventsButton.setOnClickListener(v -> loadEvents(eventList, eventsButton));
         panel.body.addView(eventsButton, wrapWrap());
 
+        // The channels of the event the reader picked. Empty until one is picked.
+        eventChannelsHeading = text("", 15, COLOR_TEXT_PRIMARY, Typeface.BOLD);
+        eventChannelsHeading.setVisibility(View.GONE);
+        eventChannelsHeading.setPadding(0, dp(16), 0, 0);
+        panel.body.addView(eventChannelsHeading, matchWrap());
+
+        LinearLayout eventChannelsBody = new LinearLayout(this);
+        eventChannelsBody.setOrientation(LinearLayout.VERTICAL);
+        panel.body.addView(eventChannelsBody, matchWrap());
+        eventChannelList = new InPlaceList<>(eventChannelsBody, ChannelChoiceRow::new);
+
         eventFeedbackView = text("", 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
         eventFeedbackView.setPadding(0, dp(10), 0, 0);
         panel.body.addView(eventFeedbackView, matchWrap());
@@ -1383,6 +1396,68 @@ public class HapConfigActivity extends Activity {
         // the reader press twice to see anything.
         panel.body.post(() -> eventsButton.performClick());
         return panel.container;
+    }
+
+    /** One channel that can play the chosen event. */
+    private static final class ChannelChoice {
+        final String contentId;
+        final String name;
+
+        ChannelChoice(String contentId, String name) {
+            this.contentId = contentId;
+            this.name = name;
+        }
+    }
+
+    /** A channel of the chosen event: press it and it plays. */
+    private final class ChannelChoiceRow implements InPlaceList.Row<ChannelChoice> {
+        private final TextView view;
+        private ChannelChoice choice;
+
+        ChannelChoiceRow() {
+            view = text("", 14, COLOR_TEXT_PRIMARY, Typeface.NORMAL);
+            view.setFocusable(true);
+            view.setFocusableInTouchMode(true);
+            view.setPadding(dp(16), 0, 0, 0);
+            view.setLayoutParams(matchWrap());
+            view.setOnClickListener(v -> {
+                if (choice != null) launchChannel(choice.contentId, choice.name);
+            });
+        }
+
+        @Override
+        public View view() {
+            return view;
+        }
+
+        @Override
+        public void bind(ChannelChoice item) {
+            choice = item;
+            view.setText("▸  " + item.name);
+        }
+    }
+
+    /** Lists the channels that carry {@code event}, so the reader picks one instead of guessing. */
+    private void showEventChannels(EventCatalog.Event event) {
+        if (event == null || eventChannelList == null) return;
+        HapBridge.PluginChannelsInfo plugin = selectedPlugin();
+        List<ChannelChoice> choices = new ArrayList<>();
+        for (String contentId : event.channelIds) {
+            String name = null;
+            if (plugin != null) {
+                for (HapBridge.ChannelInfo channel : plugin.channels) {
+                    if (contentId.equals(channel.contentId)) {
+                        name = channel.name;
+                        break;
+                    }
+                }
+            }
+            choices.add(new ChannelChoice(contentId, name == null ? contentId : name));
+        }
+        if (choices.isEmpty()) return;
+        eventChannelsHeading.setVisibility(View.VISIBLE);
+        eventChannelsHeading.setText(getString(R.string.events_channels_for, event.title));
+        eventChannelList.apply(choices);
     }
 
     /** One event line. Text only, but focusable so the D-pad can walk the list. */
@@ -1395,11 +1470,9 @@ public class HapConfigActivity extends Activity {
             view.setFocusable(true);
             view.setFocusableInTouchMode(true);
             view.setLayoutParams(matchWrap());
-            view.setOnClickListener(v -> {
-                if (event == null || event.channelIds.isEmpty()) return;
-                // The first channel of the event: the list is already in the order the playlist uses.
-                launchChannel(event.channelIds.get(0), event.title);
-            });
+            // An event is carried by one or more channels, so picking it opens the choice rather than
+            // starting whichever happened to be first.
+            view.setOnClickListener(v -> showEventChannels(event));
         }
 
         @Override
