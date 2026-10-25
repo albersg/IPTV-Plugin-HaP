@@ -1,6 +1,7 @@
 package com.streamvault.plugin.hap;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -113,6 +114,32 @@ public class EventCatalogTest {
     public void nothingOnMeansNoEvents() throws IOException {
         // 14:00 UTC, before anything in the fixture starts.
         assertTrue(EventCatalog.onNow(guide(), ourChannels(), 1792936800000L).isEmpty());
+    }
+
+    @Test
+    public void aProgrammeTitledWithItsOwnChannelNameIsNotAnEvent() throws IOException {
+        // Real guides fill the schedule with the channel's own name. Listing that produces nonsense:
+        // "M+ Liga de Campeones 3, emitted by M+ Liga de Campeones 3 720p".
+        String filler = "<?xml version=\"1.0\"?><tv>"
+                + "<channel id=\"M+ Liga de Campeones 3\">"
+                + "<display-name>M+ Liga de Campeones 3</display-name></channel>"
+                + "<programme start=\"20261025210000 +0000\" stop=\"20261025230000 +0000\""
+                + " channel=\"M+ Liga de Campeones 3\">"
+                + "<title>M+ Liga de Campeones 3</title></programme>"
+                + "</tv>";
+        EpgWindow window = EpgWindow.parse(
+                new java.io.ByteArrayInputStream(filler.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                NOW, 3_600_000L, 3_600_000L);
+        Map<String, String> ours = new LinkedHashMap<>();
+        ours.put("ch1", "M+ Liga de Campeones 3");
+        assertTrue(EventCatalog.onNow(window, ours, NOW).isEmpty());
+    }
+
+    @Test
+    public void aRealProgrammeOnThatSameChannelStillCounts() throws IOException {
+        // The rule must not throw away the channel's real programming along with the filler.
+        List<EventCatalog.Event> events = EventCatalog.onNow(guide(), ourChannels(), NOW);
+        assertFalse(events.isEmpty());
     }
 
     @Test

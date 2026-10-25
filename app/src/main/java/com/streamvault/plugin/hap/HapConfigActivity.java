@@ -204,6 +204,7 @@ public class HapConfigActivity extends Activity {
     private InPlaceList<EventCatalog.Event> eventListRef;
     private InPlaceList<ChannelChoice> eventChannelList;
     private Button eventRefreshButton;
+    private EventRow chosenEventRow;
     private TextView eventChannelsHeading;
     private List<EventCatalog.Event> currentEvents = new ArrayList<>();
     private final Map<EventSport.Kind, Button> eventFilterButtons =
@@ -1456,7 +1457,10 @@ public class HapConfigActivity extends Activity {
     }
 
     /** Lists the channels that carry {@code event}, so the reader picks one instead of guessing. */
-    private void showEventChannels(EventCatalog.Event event) {
+    private void showEventChannels(EventCatalog.Event event, EventRow row) {
+        if (chosenEventRow != null) chosenEventRow.setChosen(false);
+        chosenEventRow = row;
+        if (chosenEventRow != null) chosenEventRow.setChosen(true);
         if (event == null || eventChannelList == null) return;
         HapBridge.PluginChannelsInfo plugin = selectedPlugin();
         List<ChannelChoice> choices = new ArrayList<>();
@@ -1482,6 +1486,7 @@ public class HapConfigActivity extends Activity {
     private final class EventRow implements InPlaceList.Row<EventCatalog.Event> {
         private final TextView view;
         private EventCatalog.Event event;
+        private boolean chosen;
 
         EventRow() {
             view = text("", 14, COLOR_TEXT_PRIMARY, Typeface.NORMAL);
@@ -1490,12 +1495,23 @@ public class HapConfigActivity extends Activity {
             view.setLayoutParams(matchWrap());
             // An event is carried by one or more channels, so picking it opens the choice rather than
             // starting whichever happened to be first.
-            view.setOnClickListener(v -> showEventChannels(event));
+            view.setOnClickListener(v -> {
+                if (event != null) showEventChannels(event, this);
+            });
         }
 
         @Override
         public View view() {
             return view;
+        }
+
+        /** Marks the event whose channels are on screen, so it is obvious which one was pressed. */
+        void setChosen(boolean isChosen) {
+            if (chosen == isChosen) return;
+            chosen = isChosen;
+            view.setTextColor(isChosen ? COLOR_TEXT_PRIMARY : COLOR_TEXT_PRIMARY);
+            view.setTypeface(Typeface.DEFAULT, isChosen ? Typeface.BOLD : Typeface.NORMAL);
+            if (event != null) bind(event);
         }
 
         @Override
@@ -1505,7 +1521,7 @@ public class HapConfigActivity extends Activity {
                     : new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
                             .format(new java.util.Date(event.startMillis));
             String sport = event.sport() == null ? "" : " · " + event.sport().label();
-            view.setText(time + "  " + event.title + "  ·  "
+            view.setText((chosen ? "\u25B8  " : "") + time + "  " + event.title + "  ·  "
                     + getResources().getQuantityString(
                             R.plurals.events_channel_count, event.channelCount(), event.channelCount())
                     + sport);

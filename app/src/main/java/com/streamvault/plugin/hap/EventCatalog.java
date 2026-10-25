@@ -3,7 +3,9 @@ package com.streamvault.plugin.hap;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What is on right now, grouped by programme and crossed with the channels this app can play.
@@ -77,6 +79,16 @@ public final class EventCatalog {
         Map<String, EpgWindow.Programme> byGuideChannel = guide.onNow(nowMillis);
         if (byGuideChannel.isEmpty()) return out;
 
+        // Some guides fill the schedule with the channel's own name as the programme title. That is not
+        // an event: it is the channel wearing a title, and listing it produces nonsense such as "M+ Liga
+        // de Campeones 3, emitted by M+ Liga de Campeones 3 720p".
+        Set<String> channelNames = new LinkedHashSet<>();
+        for (ChannelGuideMatcher.GuideChannel channel : guide.channels()) {
+            channelNames.add(ChannelGuideMatcher.normalize(channel.id));
+            for (String name : channel.names) channelNames.add(ChannelGuideMatcher.normalize(name));
+        }
+        channelNames.remove("");
+
         // Normalised title key, so the same programme spelled slightly differently stays one event.
         Map<String, String> titles = new LinkedHashMap<>();
         Map<String, List<String>> channels = new LinkedHashMap<>();
@@ -90,6 +102,7 @@ public final class EventCatalog {
             if (programme == null) continue;
             String title = programme.title == null ? "" : programme.title.trim();
             if (title.isEmpty()) continue;
+            if (channelNames.contains(ChannelGuideMatcher.normalize(title))) continue;
             String key = ChannelGuideMatcher.normalize(title);
             if (key.isEmpty()) continue;
             titles.putIfAbsent(key, title);
