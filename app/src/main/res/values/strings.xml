@@ -217,7 +217,6 @@
     <string name="server_state_error_body">Check the error message and start HaP again.</string>
     <string name="home_cta_title">How to watch my channels</string>
     <string name="home_cta_subtitle">Connect TiviMate, StreamVault or another player</string>
-    <string name="home_cta_placeholder_message">HaP does not play video itself. Connect TiviMate, StreamVault or another IPTV player using the /aio URL shown in Connections.</string>
     <string name="home_card_description">%1$s. %2$s</string>
     <string name="home_lists_title">My lists</string>
     <string name="home_lists_subtitle">Manage M3U lists and custom channels</string>
@@ -236,7 +235,24 @@
     <string name="service_state_starting">Starting</string>
     <string name="service_state_error">Error</string>
     <string name="hap_enable_switch_description">Start or stop the HaP server</string>
-    <string name="button_close">Close</string>
+
+    <!--
+        "How to watch my channels" screen (S4). It explains in plain words that HaP is a server and
+        never a player, and shows the real playlist address. The Spanish file carries the exact
+        wording of the approved mockup; this file is its English translation.
+    -->
+    <string name="connect_intro">HaP is an IPTV server: it does not play video itself. Your channels are played by your own player, connected to HaP.</string>
+    <string name="connect_step1_title">1. Turn on the HaP server</string>
+    <string name="connect_step1_action">Turn on server</string>
+    <string name="connect_step2_title">2. Add this address in your player</string>
+    <string name="connect_address_local">Local address (this device)</string>
+    <string name="connect_address_lan">Address in your network (LAN)</string>
+    <string name="connect_lan_off">LAN mode is off, so only this device can use the address above. Turn it on in Connections to watch from another device.</string>
+    <string name="connect_lan_no_address">LAN mode is on, but HaP cannot find a network address. Check the Wi-Fi or Ethernet connection of this device.</string>
+    <string name="connect_step3_title">3. Open the channel list in your player</string>
+    <string name="connect_step3_body">Your player loads the list from that address and you pick a channel there.</string>
+    <string name="connect_players_title">Compatible players</string>
+    <string name="connect_players_body">TiviMate, StreamVault or any IPTV player that accepts an M3U URL.</string>
 
     <!-- Updates (GitHub Releases). English and Spanish must stay in sync (AGENTS.md). -->
     <string name="section_updates">Updates</string>

@@ -48,6 +48,17 @@
             </intent-filter>
         </activity>
 
+        <!--
+            "Cómo ver mis canales" (S4). Its own activity, so the five-section shell and its tests
+            stay untouched; not exported, because only HaP itself opens it, and deliberately not a
+            launcher entry: it is reached from the home screen's dominant action.
+        -->
+        <activity
+            android:name=".ConnectPlayerActivity"
+            android:exported="false"
+            android:label="@string/home_cta_title"
+            android:theme="@style/AppTheme" />
+
         <service
             android:name=".StreamVaultHapPluginService"
             android:exported="true">

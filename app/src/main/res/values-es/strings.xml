@@ -217,7 +217,6 @@
     <string name="server_state_error_body">Revisa el mensaje de error y vuelve a iniciar HaP.</string>
     <string name="home_cta_title">Cómo ver mis canales</string>
     <string name="home_cta_subtitle">Conectar TiviMate, StreamVault u otro reproductor</string>
-    <string name="home_cta_placeholder_message">HaP no reproduce vídeo. Conecta TiviMate, StreamVault u otro reproductor IPTV con la URL /aio que aparece en Conexiones.</string>
     <string name="home_card_description">%1$s. %2$s</string>
     <string name="home_lists_title">Mis listas</string>
     <string name="home_lists_subtitle">Gestionar listas M3U y canales personalizados</string>
@@ -236,7 +235,24 @@
     <string name="service_state_starting">Iniciando</string>
     <string name="service_state_error">Error</string>
     <string name="hap_enable_switch_description">Iniciar o detener el servidor HaP</string>
-    <string name="button_close">Cerrar</string>
+
+    <!--
+        Pantalla «Cómo ver mis canales» (S4). Conserva literalmente el texto del diseño aprobado:
+        HaP es un servidor y nunca un reproductor, y muestra la dirección real de la lista.
+        values/strings.xml es su traducción al inglés y ambos deben mantenerse en sincronía.
+    -->
+    <string name="connect_intro">HaP es un servidor IPTV: no reproduce vídeo. Tus canales se ven en tu propio reproductor, conectado a HaP.</string>
+    <string name="connect_step1_title">1. Activa el servidor HaP</string>
+    <string name="connect_step1_action">Activar servidor</string>
+    <string name="connect_step2_title">2. Añade esta dirección en tu reproductor</string>
+    <string name="connect_address_local">Dirección local (este dispositivo)</string>
+    <string name="connect_address_lan">Dirección en tu red (LAN)</string>
+    <string name="connect_lan_off">El modo LAN está desactivado, así que solo este dispositivo puede usar la dirección de arriba. Actívalo en Conexiones para ver los canales desde otro dispositivo.</string>
+    <string name="connect_lan_no_address">El modo LAN está activado, pero HaP no encuentra una dirección de red. Revisa la conexión Wi-Fi o Ethernet de este dispositivo.</string>
+    <string name="connect_step3_title">3. Abre la lista de canales en tu reproductor</string>
+    <string name="connect_step3_body">Tu reproductor carga la lista desde esa dirección y ahí eliges el canal.</string>
+    <string name="connect_players_title">Reproductores compatibles</string>
+    <string name="connect_players_body">TiviMate, StreamVault o cualquier reproductor IPTV que acepte una URL M3U.</string>
 
     <!-- Actualizaciones (GitHub Releases). Mantener en sincronía con values/strings.xml. -->
     <string name="section_updates">Actualizaciones</string>

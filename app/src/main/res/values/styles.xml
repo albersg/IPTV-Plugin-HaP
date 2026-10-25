@@ -50,6 +50,16 @@
     </style>
 
     <!--
+        A playlist address. Monospace is the one type variant the scale above lacks, and it is a
+        real gap: the address is read character by character from the sofa, where 1/l and 0/O are
+        indistinguishable in a proportional face. It inherits the title size and colour, so no new
+        size and no new colour enter the design system.
+    -->
+    <style name="TextAppearance.HaP.Address" parent="TextAppearance.HaP.Title">
+        <item name="android:fontFamily">monospace</item>
+    </style>
+
+    <!--
         A rail entry: one line of subtitle text on the shared nav-item state list. Layout
         parameters stay in the layout file on purpose: a style cannot reliably carry layout_*
         attributes, because layout params are read without resolving the style resource.

@@ -1,10 +1,10 @@
 package com.streamvault.plugin.hap;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
@@ -425,7 +425,8 @@ public class HapConfigActivity extends Activity {
         return new HomeScreen.Listener() {
             @Override
             public void onOpenHowToWatch() {
-                showHowToWatchPlaceholder();
+                // An explicit Intent: the screen is part of HaP, not an exported action.
+                startActivity(new Intent(HapConfigActivity.this, ConnectPlayerActivity.class));
             }
 
             @Override
@@ -438,18 +439,6 @@ public class HapConfigActivity extends Activity {
                 showSection(HapSections.Section.CANALES, true);
             }
         };
-    }
-
-    /**
-     * Placeholder for the "how to watch my channels" screen: it explains, in plain language, that
-     * HaP serves an external player instead of playing video itself (S4). T5 replaces it.
-     */
-    private void showHowToWatchPlaceholder() {
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.home_cta_title)
-                .setMessage(R.string.home_cta_placeholder_message)
-                .setPositiveButton(R.string.button_close, null)
-                .show();
     }
 
     /**

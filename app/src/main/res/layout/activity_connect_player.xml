@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    "Cómo ver mis canales": the screen behind the home screen's dominant action.
+
+    It is its own activity so the five-section shell and its tests stay untouched. The content
+    order is the order of the approved design: title, one sentence stating that HaP is a server and
+    never a player (S4), the three numbered steps, the players HaP works with, and the same key-hint
+    footer the shell shows.
+
+    Only the words that come from the live runtime are left empty here; ConnectPlayerActivity fills
+    the server state and the two addresses from the real proxy sources, and never rebuilds this
+    tree: it only re-labels, so focus and scroll survive a state refresh (S6, S7).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/connect_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/hap_screen_padding_horizontal"
+    android:paddingTop="@dimen/hap_screen_padding_vertical"
+    android:paddingEnd="@dimen/hap_screen_padding_horizontal"
+    android:paddingBottom="@dimen/hap_screen_padding_vertical">
+
+    <ScrollView
+        android:id="@+id/connect_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:focusable="false"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/connect_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/home_cta_title"
+                android:textAppearance="@style/TextAppearance.HaP.Display" />
+
+            <TextView
+                android:id="@+id/connect_intro"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/hap_gap_row"
+                android:text="@string/connect_intro"
+                android:textAppearance="@style/TextAppearance.HaP.Body"
+                android:textColor="@color/hap_text_muted" />
+
+            <!-- Step 1: the server state in plain words, plus an obvious action when it is off. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/hap_gap_block"
+                android:background="@drawable/bg_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/hap_card_padding">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/connect_step1_title"
+                    android:textAppearance="@style/TextAppearance.HaP.Subtitle" />
+
+                <TextView
+                    android:id="@+id/connect_server_state"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:textAppearance="@style/TextAppearance.HaP.Body" />
+
+                <TextView
+                    android:id="@+id/connect_server_body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:textAppearance="@style/TextAppearance.HaP.Body"
+                    android:textColor="@color/hap_text_muted" />
+
+                <!--
+                    The one action of the screen, shown only while the server is stopped or failed.
+                    It calls exactly what the home switch calls, so there is a single start path.
+                -->
+                <LinearLayout
+                    android:id="@+id/connect_server_action"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_block"
+                    android:background="@drawable/bg_cta"
+                    android:clickable="true"
+                    android:defaultFocusHighlightEnabled="false"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="@dimen/hap_card_padding"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/connect_step1_action"
+                        android:textAppearance="@style/TextAppearance.HaP.Subtitle"
+                        android:textColor="@color/hap_text_on_accent" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Step 2: the address, from the real playlist source, never composed by hand. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/hap_gap_block"
+                android:background="@drawable/bg_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/hap_card_padding">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/connect_step2_title"
+                    android:textAppearance="@style/TextAppearance.HaP.Subtitle" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/connect_address_local"
+                    android:textAppearance="@style/TextAppearance.HaP.Caption" />
+
+                <!--
+                    A long LAN address must stay whole: the address keeps its full width and the
+                    row scrolls sideways instead of ellipsizing a character that matters.
+                -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:focusable="false"
+                    android:scrollbars="horizontal">
+
+                    <TextView
+                        android:id="@+id/connect_local_address"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxLines="1"
+                        android:textAppearance="@style/TextAppearance.HaP.Address"
+                        android:textIsSelectable="true" />
+                </HorizontalScrollView>
+
+                <LinearLayout
+                    android:id="@+id/connect_lan_block"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_block"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/connect_address_lan"
+                        android:textAppearance="@style/TextAppearance.HaP.Caption" />
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:focusable="false"
+                        android:scrollbars="horizontal">
+
+                        <TextView
+                            android:id="@+id/connect_lan_address"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:maxLines="1"
+                            android:textAppearance="@style/TextAppearance.HaP.Address"
+                            android:textIsSelectable="true" />
+                    </HorizontalScrollView>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/connect_lan_note"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:textAppearance="@style/TextAppearance.HaP.Body"
+                    android:textColor="@color/hap_text_muted"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Step 3: what to do in the player once the address is added. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/hap_gap_block"
+                android:background="@drawable/bg_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/hap_card_padding">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/connect_step3_title"
+                    android:textAppearance="@style/TextAppearance.HaP.Subtitle" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/connect_step3_body"
+                    android:textAppearance="@style/TextAppearance.HaP.Body"
+                    android:textColor="@color/hap_text_muted" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/hap_gap_block"
+                android:background="@drawable/bg_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/hap_card_padding">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/connect_players_title"
+                    android:textAppearance="@style/TextAppearance.HaP.Subtitle" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/connect_players_body"
+                    android:textAppearance="@style/TextAppearance.HaP.Body" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/hap_hairline"
+        android:layout_marginTop="@dimen/hap_gap_block"
+        android:background="@color/hap_hairline" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/hap_gap_row"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/connect_hint_select"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/hint_select"
+            android:textAppearance="@style/TextAppearance.HaP.Caption" />
+
+        <TextView
+            android:id="@+id/connect_hint_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/hap_gap_block"
+            android:text="@string/hint_back"
+            android:textAppearance="@style/TextAppearance.HaP.Caption" />
+    </LinearLayout>
+</LinearLayout>

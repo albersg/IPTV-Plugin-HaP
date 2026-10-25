@@ -263,7 +263,14 @@ public final class HomeScreen {
         }
     }
 
-    private static int serverReady(HapServiceStates.ServerState state) {
+    /**
+     * The one-line state word and the "what to do next" sentence of the status card.
+     *
+     * <p>Package-private because the "Cómo ver mis canales" screen says the same two things about
+     * the same four states: one owner of the approved wording means the two screens can never
+     * disagree about what the server is doing (S3, S5).
+     */
+    static int serverReady(HapServiceStates.ServerState state) {
         switch (state) {
             case RUNNING:
                 return R.string.server_state_running_ready;
@@ -277,7 +284,7 @@ public final class HomeScreen {
         }
     }
 
-    private static int serverBody(HapServiceStates.ServerState state) {
+    static int serverBody(HapServiceStates.ServerState state) {
         switch (state) {
             case RUNNING:
                 return R.string.server_state_running_body;
