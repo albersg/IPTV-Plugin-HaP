@@ -46,29 +46,43 @@ public class EventCatalogTest {
         return map;
     }
 
+    private static EventCatalog.Event byTitle(List<EventCatalog.Event> events, String title) {
+        for (EventCatalog.Event event : events) {
+            if (event.title.equals(title)) return event;
+        }
+        throw new AssertionError("no event titled " + title + " in " + events.size());
+    }
+
     @Test
     public void oneEventPerProgrammeWithTheChannelsThatCarryIt() throws IOException {
         List<EventCatalog.Event> events = EventCatalog.onNow(guide(), ourChannels(), NOW);
         assertEquals(2, events.size());
 
-        EventCatalog.Event clasic = events.get(0);
-        assertEquals("Jornada 10: Barcelona - Real Madrid", clasic.title);
+        EventCatalog.Event clasic = byTitle(events, "Jornada 10: Barcelona - Real Madrid");
         assertEquals(2, clasic.channelCount());
         assertEquals(Arrays.asList("ch_laliga_1080", "ch_dazn1_1080"), clasic.channelIds);
 
-        assertEquals("Noticias 24H", events.get(1).title);
-        assertEquals(1, events.get(1).channelCount());
+        assertEquals(1, byTitle(events, "Noticias 24H").channelCount());
     }
 
     @Test
-    public void eventsWithMoreChannelsComeFirst() throws IOException {
-        // Swap the fixture's channel order: the two-channel event must still lead.
+    public void eventsAreOrderedByTheirStartTime() throws IOException {
+        // "Noticias 24H" started at 20:00 and the match at 21:00, so the news comes first.
+        List<EventCatalog.Event> events = EventCatalog.onNow(guide(), ourChannels(), NOW);
+        assertEquals("Noticias 24H", events.get(0).title);
+        assertEquals("Jornada 10: Barcelona - Real Madrid", events.get(1).title);
+    }
+
+    @Test
+    public void onTheSameStartTheEventWithMoreChannelsComesFirst() throws IOException {
         Map<String, String> reversed = new LinkedHashMap<>();
         reversed.put("ch_la1", "La 1 HD");
         reversed.put("ch_dazn1_1080", "DAZN 1 HD");
         reversed.put("ch_laliga_1080", "DAZN LaLiga HD");
         List<EventCatalog.Event> events = EventCatalog.onNow(guide(), reversed, NOW);
-        assertEquals("Jornada 10: Barcelona - Real Madrid", events.get(0).title);
+        // Grouping and ordering do not depend on the map order.
+        assertEquals(2, byTitle(events, "Jornada 10: Barcelona - Real Madrid").channelCount());
+        assertEquals("Noticias 24H", events.get(0).title);
     }
 
     @Test
@@ -85,7 +99,7 @@ public class EventCatalogTest {
         withUnmatched.put("ch_raro", "Canal Que No Esta En La Guia");
         List<EventCatalog.Event> events = EventCatalog.onNow(guide(), withUnmatched, NOW);
         assertEquals(2, events.size());
-        assertEquals(2, events.get(0).channelCount());
+        assertEquals(2, byTitle(events, "Jornada 10: Barcelona - Real Madrid").channelCount());
     }
 
     @Test
@@ -105,6 +119,30 @@ public class EventCatalogTest {
     public void noGuideOrNoMatchesIsSafe() throws IOException {
         assertTrue(EventCatalog.onNow(null, ourChannels(), NOW).isEmpty());
         assertTrue(EventCatalog.onNow(guide(), new LinkedHashMap<>(), NOW).isEmpty());
+    }
+
+    @Test
+    public void eventsAreOrderedByWhenTheyStarted() throws IOException {
+        List<EventCatalog.Event> events = EventCatalog.onNow(guide(), ourChannels(), NOW);
+        EventCatalog.Event clasic = byTitle(events, "Jornada 10: Barcelona - Real Madrid");
+        assertEquals(1792962000000L, clasic.startMillis);
+        assertEquals(1792969200000L, clasic.stopMillis);
+        assertTrue(events.get(0).startMillis <= events.get(1).startMillis);
+    }
+
+    @Test
+    public void theSportFilterKeepsOnlyThatSport() throws IOException {
+        List<EventCatalog.Event> events = EventCatalog.onNow(guide(), ourChannels(), NOW);
+        assertEquals(1, EventCatalog.matching(events, "", EventSport.Kind.FUTBOL).size());
+        assertTrue(EventCatalog.matching(events, "", EventSport.Kind.BALONCESTO).isEmpty());
+    }
+
+    @Test
+    public void theFilterListsOnlyTheSportsThatAreOn() throws IOException {
+        List<EventCatalog.Event> events = EventCatalog.onNow(guide(), ourChannels(), NOW);
+        List<EventSport.Kind> sports = EventCatalog.sports(events);
+        assertTrue(sports.contains(EventSport.Kind.FUTBOL));
+        assertTrue(!sports.contains(EventSport.Kind.CICLISMO));
     }
 
     @Test

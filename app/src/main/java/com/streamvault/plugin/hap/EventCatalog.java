@@ -26,10 +26,21 @@ public final class EventCatalog {
         public final String title;
         /** Playlist channel ids, in the order the playlist lists them. */
         public final List<String> channelIds;
+        /** When it started, in milliseconds; 0 when the guide did not say. */
+        public final long startMillis;
+        /** When it ends, in milliseconds; 0 when the guide did not say. */
+        public final long stopMillis;
 
-        Event(String title, List<String> channelIds) {
+        Event(String title, List<String> channelIds, long startMillis, long stopMillis) {
             this.title = title;
             this.channelIds = channelIds;
+            this.startMillis = startMillis;
+            this.stopMillis = stopMillis;
+        }
+
+        /** The sport the title names, or null when it does not say. */
+        public EventSport.Kind sport() {
+            return EventSport.classify(title);
         }
 
         /** How many of our channels carry this event. */
@@ -69,6 +80,8 @@ public final class EventCatalog {
         // Normalised title key, so the same programme spelled slightly differently stays one event.
         Map<String, String> titles = new LinkedHashMap<>();
         Map<String, List<String>> channels = new LinkedHashMap<>();
+        Map<String, Long> starts = new LinkedHashMap<>();
+        Map<String, Long> stops = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : channelToGuide.entrySet()) {
             String channelId = entry.getKey();
             String guideId = entry.getValue();
@@ -86,12 +99,23 @@ public final class EventCatalog {
                 channels.put(key, list);
             }
             if (!list.contains(channelId)) list.add(channelId);
+            Long known = starts.get(key);
+            if (known == null || programme.startMillis < known) starts.put(key, programme.startMillis);
+            Long ends = stops.get(key);
+            if (ends == null || programme.stopMillis > ends) stops.put(key, programme.stopMillis);
         }
 
         for (Map.Entry<String, List<String>> entry : channels.entrySet()) {
-            out.add(new Event(titles.get(entry.getKey()), entry.getValue()));
+            String key = entry.getKey();
+            out.add(new Event(titles.get(key), entry.getValue(),
+                    starts.get(key) == null ? 0 : starts.get(key),
+                    stops.get(key) == null ? 0 : stops.get(key)));
         }
+        // Ordered by when it started, which is how a guide reads; more channels first on a tie, because
+        // the event carried by eight channels is the one worth watching.
         out.sort((a, b) -> {
+            int byStart = Long.compare(a.startMillis, b.startMillis);
+            if (byStart != 0) return byStart;
             int byChannels = Integer.compare(b.channelCount(), a.channelCount());
             if (byChannels != 0) return byChannels;
             return a.title.compareToIgnoreCase(b.title);
@@ -104,10 +128,37 @@ public final class EventCatalog {
      * search, so "barcelona" finds "Jornada 10: Barcelona - Real Madrid".
      */
     public static List<Event> matching(List<Event> events, String query) {
+        return matching(events, query, null);
+    }
+
+    /**
+     * The events a title query and a sport filter keep.
+     *
+     * @param sport the sport to keep, or null for all of them. An event whose title names no sport is
+     *              only kept when no filter is set, because it cannot be shown under one.
+     */
+    public static List<Event> matching(List<Event> events, String query, EventSport.Kind sport) {
         List<Event> out = new ArrayList<>();
         if (events == null) return out;
         for (Event event : events) {
-            if (ChannelSearch.matches(event.title, query)) out.add(event);
+            if (!ChannelSearch.matches(event.title, query)) continue;
+            if (sport != null && event.sport() != sport) continue;
+            out.add(event);
+        }
+        return out;
+    }
+
+    /** The sports present in a list of events, in the order the filter offers them. */
+    public static List<EventSport.Kind> sports(List<Event> events) {
+        List<EventSport.Kind> out = new ArrayList<>();
+        if (events == null) return out;
+        for (EventSport.Kind kind : EventSport.Kind.values()) {
+            for (Event event : events) {
+                if (event.sport() == kind) {
+                    out.add(kind);
+                    break;
+                }
+            }
         }
         return out;
     }
