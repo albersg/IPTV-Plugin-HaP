@@ -143,6 +143,13 @@ public final class EpgWindow {
         return millis;
     }
 
+    /** The inverse of {@link #parseTimestamp}, for tests and for writing a guide back out. */
+    static String formatTimestamp(long millis) {
+        SimpleDateFormat format = new SimpleDateFormat("yyyyMMddHHmmss", Locale.ROOT);
+        format.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return format.format(new Date(millis));
+    }
+
     private static final class Handler extends DefaultHandler {
 
         private final long fromMillis;

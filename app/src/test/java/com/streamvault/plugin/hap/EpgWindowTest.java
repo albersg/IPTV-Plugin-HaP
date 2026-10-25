@@ -128,6 +128,39 @@ public class EpgWindowTest {
     }
 
     @Test
+    public void aGuideWithTensOfThousandsOfProgrammesKeepsOnlyTheWindow() throws IOException {
+        // The real guide has 83,073 programmes. This builds 30,000 over 30 days and proves the window is
+        // what decides how much is kept, not the size of the file.
+        long day = 24 * 3_600_000L;
+        StringBuilder xml = new StringBuilder(3_000_000);
+        xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?><tv>");
+        xml.append("<channel id=\"C\"><display-name>C</display-name></channel>");
+        long base = NOW - 15 * day;
+        for (int i = 0; i < 30_000; i++) {
+            long start = base + i * (day / 1000);
+            xml.append("<programme start=\"")
+                    .append(EpgWindow.formatTimestamp(start))
+                    .append(" +0000\" stop=\"")
+                    .append(EpgWindow.formatTimestamp(start + 3_600_000L))
+                    .append(" +0000\" channel=\"C\"><title>P")
+                    .append(i)
+                    .append("</title></programme>");
+        }
+        xml.append("</tv>");
+
+        long began = System.nanoTime();
+        EpgWindow window = parse(xml.toString(), NOW, 3_600_000L, 3_600_000L);
+        long elapsedMs = (System.nanoTime() - began) / 1_000_000L;
+
+        // Each programme lasts an hour and they start 86 seconds apart, so a three-hour window holds
+        // about 125 of them. What matters is that 30,000 in the file does not mean 30,000 in memory.
+        assertTrue("kept nothing", !window.programmes().isEmpty());
+        assertTrue("kept far too much: " + window.programmes().size(),
+                window.programmes().size() <= 500);
+        assertTrue("took " + elapsedMs + " ms", elapsedMs < 20_000);
+    }
+
+    @Test
     public void anEmptyGuideIsNotAnError() throws IOException {
         EpgWindow window = parse("<?xml version=\"1.0\"?><tv></tv>", NOW, 0, 0);
         assertTrue(window.channels().isEmpty());
