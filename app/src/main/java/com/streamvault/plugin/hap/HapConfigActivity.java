@@ -24,7 +24,6 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewParent;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -132,6 +131,11 @@ public class HapConfigActivity extends Activity {
     private LinearLayout navRail;
     private FrameLayout sectionContainer;
     private HapSections.Section currentSection = HapSections.Section.INICIO;
+    /**
+     * Resolves every D-pad press and owns where focus goes: movement inside the rail and the
+     * current section, the remembered control of each section, and the repair after a rebuild.
+     */
+    private FocusNavigator focusNavigator;
     private HomeScreen homeScreen;
 
     private Pill statePill;
@@ -216,8 +220,6 @@ public class HapConfigActivity extends Activity {
     private volatile AtomicBoolean updateCancelFlag = new AtomicBoolean(false);
     private boolean suppressUpdateCallbacks;
     private int lastUpdateProgressPercent = -1;
-    /** True when the user started the download from the action row, so init can take over focus. */
-    private boolean updateActionsHadFocus;
 
     private final Runnable refreshRunnable = new Runnable() {
         @Override
@@ -257,6 +259,24 @@ public class HapConfigActivity extends Activity {
         refreshRunnable.run();
         // The system installer owns the screen during an update, so its result is picked up here.
         showPendingInstallResult();
+        // Coming back from the installer, the unknown-sources settings or the "Cómo ver mis
+        // canales" screen puts the user back on the control that opened it, but only when nothing
+        // else kept the focus.
+        if (focusNavigator != null) focusNavigator.restoreFocus();
+    }
+
+    /**
+     * A dialog of this activity (or any window opened over it) takes the window focus away and gives
+     * it back. Remembering on the way out and restoring on the way in is what makes a dismissed
+     * dialog put the user back on the control that opened it. Restoring never steals focus: it only
+     * acts when nothing in the rail or the section holds it.
+     */
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (destroyed || focusNavigator == null) return;
+        if (hasFocus) focusNavigator.restoreFocus();
+        else focusNavigator.rememberFocus();
     }
 
     /**
@@ -274,8 +294,7 @@ public class HapConfigActivity extends Activity {
         HapSections.Section target = HapSections.backTarget(currentSection);
         if (target != null) {
             showSection(target, false);
-            TextView item = navItemFor(target);
-            if (item != null) item.requestFocus();
+            if (focusNavigator != null) focusNavigator.focusRailItem(target);
             return;
         }
         super.onBackPressed();
@@ -284,6 +303,8 @@ public class HapConfigActivity extends Activity {
     @Override
     protected void onPause() {
         handler.removeCallbacks(refreshRunnable);
+        // Where the user was, for when this window comes back.
+        if (focusNavigator != null) focusNavigator.rememberFocus();
         super.onPause();
     }
 
@@ -291,6 +312,7 @@ public class HapConfigActivity extends Activity {
     protected void onDestroy() {
         // A stale posted callback must never resurrect the poll loop after teardown.
         destroyed = true;
+        if (focusNavigator != null) focusNavigator.detach();
         handler.removeCallbacksAndMessages(null);
         abortChannelTest();
         releaseUpdateResources();
@@ -312,6 +334,10 @@ public class HapConfigActivity extends Activity {
         sectionContainer = findViewById(R.id.hap_section_container);
         bindNavigation();
         buildSections();
+        // One owner of the D-pad for the whole screen: it reads the live view tree on every press,
+        // so the sections below can be built, hidden and rebuilt without telling it anything.
+        focusNavigator = new FocusNavigator(findViewById(R.id.hap_root), navRail, sectionContainer);
+        focusNavigator.attach();
         showSection(HapSections.Section.INICIO, false);
     }
 
@@ -461,9 +487,11 @@ public class HapConfigActivity extends Activity {
             if (item != null && item.isSelected() != (each == section)) item.setSelected(each == section);
         }
 
-        if (focusContent) {
-            View entry = firstFocusableIn(sectionView(section));
-            if (entry != null) entry.requestFocus();
+        if (focusNavigator != null) {
+            // The navigator keeps one remembered control per section, so entering a section returns
+            // to where the user left it and the first entry of a section gets its first control.
+            focusNavigator.setSection(section);
+            if (focusContent) focusNavigator.focusSection();
         }
     }
 
@@ -472,77 +500,19 @@ public class HapConfigActivity extends Activity {
         return index >= 0 && index < navItems.size() ? navItems.get(index) : null;
     }
 
-    private View sectionView(HapSections.Section section) {
-        return sectionViews.get(section.ordinal());
-    }
-
     /**
-     * D-pad movement between the rail and the content (S6 groundwork; T6 owns the full chain).
+     * The one entry point of every D-pad press (S6).
      *
-     * <p>RIGHT on a rail entry enters the visible section, LEFT from a view that has nothing to
-     * its left returns to the rail, and UP/DOWN are left to the platform so each column keeps its
-     * own order. LEFT is only taken when the platform finds no target and the focused view is not
-     * a text field, where LEFT belongs to the caret.
+     * <p>{@link FocusNavigator} resolves the movement from the live view tree, so nothing here
+     * depends on the platform's geometric focus search: UP/DOWN keep the column and never leave the
+     * section, the rail wraps inside itself, LEFT returns to the rail from the first control of a
+     * row, and RIGHT enters the section. A press the navigator does not recognise falls through
+     * untouched, so OK, BACK, the text fields and the system keys keep their own behaviour.
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event.getAction() == KeyEvent.ACTION_DOWN && !destroyed) {
-            View focused = getCurrentFocus();
-            if (focused != null) {
-                if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT && isInsideRail(focused)) {
-                    View entry = firstFocusableIn(sectionView(currentSection));
-                    if (entry != null) {
-                        entry.requestFocus();
-                        return true;
-                    }
-                }
-                if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT
-                        && !(focused instanceof EditText)
-                        && isInsideSection(focused)) {
-                    View next = focused.focusSearch(View.FOCUS_LEFT);
-                    if (next == null || next == focused) {
-                        TextView item = navItemFor(currentSection);
-                        if (item != null) {
-                            item.requestFocus();
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
+        if (!destroyed && focusNavigator != null && focusNavigator.handleKeyEvent(event)) return true;
         return super.dispatchKeyEvent(event);
-    }
-
-    private boolean isInsideRail(View view) {
-        return isDescendantOf(view, navRail);
-    }
-
-    private boolean isInsideSection(View view) {
-        return isDescendantOf(view, sectionView(currentSection));
-    }
-
-    private static boolean isDescendantOf(View view, View ancestor) {
-        if (view == null || ancestor == null) return false;
-        View current = view;
-        while (current != null) {
-            if (current == ancestor) return true;
-            ViewParent parent = current.getParent();
-            current = parent instanceof View ? (View) parent : null;
-        }
-        return false;
-    }
-
-    /** First focusable, visible view in reading order; used to enter a section from the rail. */
-    private static View firstFocusableIn(View view) {
-        if (view == null || view.getVisibility() != View.VISIBLE) return null;
-        if (view.isFocusable()) return view;
-        if (!(view instanceof ViewGroup)) return null;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View found = firstFocusableIn(group.getChildAt(i));
-            if (found != null) return found;
-        }
-        return null;
     }
 
     private View buildHeaderPanel() {
@@ -1473,7 +1443,6 @@ public class HapConfigActivity extends Activity {
         updateDownloadInProgress = true;
         updateCancelFlag = new AtomicBoolean(false);
         lastUpdateProgressPercent = -1;
-        updateActionsHadFocus = updateDownloadButton.hasFocus() || updateLaterButton.hasFocus();
         downloadedApk = null;
         updateCheckButton.setEnabled(false);
         updateConfirmContainer.setVisibility(View.GONE);
@@ -1577,13 +1546,9 @@ public class HapConfigActivity extends Activity {
 
         updateStatePill.apply(getString(R.string.update_status_available), COLOR_WARNING_MUTED, COLOR_WARNING);
         setUpdatesFeedback(getString(R.string.update_verified), COLOR_SUCCESS);
+        // The confirmation row appears under the action row; focus is deliberately left where the
+        // user put it, so this result never moves or steals it (S6). DOWN reaches the new row.
         updateConfirmContainer.setVisibility(View.VISIBLE);
-        // The confirmation is the next D-pad step: take focus only when the download was started
-        // from the action row, never while the user is somewhere else on the screen.
-        if (updateActionsHadFocus) {
-            updateActionsHadFocus = false;
-            updateInstallButton.requestFocus();
-        }
     }
 
     /** Stops HaP (only after the user confirmed) and hands the verified APK to the installer. */
@@ -1631,7 +1596,6 @@ public class HapConfigActivity extends Activity {
         if (updateDownloadInProgress) cancelUpdateDownload();
         ReleaseInfo release = currentUpdate.release();
         UpdateSettings.setPostponed(this, release.versionName(), release.announcedVersionCode());
-        updateActionsHadFocus = false;
         if (downloadedApk != null) {
             UpdateDownloader.delete(downloadedApk);
             downloadedApk = null;
