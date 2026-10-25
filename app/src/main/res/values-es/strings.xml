@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">HaP</string>
-    <string name="app_version_format">v%1$s</string>
     <string name="screen_title">HaP</string>
     <string name="screen_subtitle">AceStream e IPFS para reproductores IPTV — también funciona como plugin de StreamVault</string>
     <string name="status_idle">Inactivo</string>
@@ -186,6 +185,58 @@
     <string name="message_custom_channel_saved">Canal guardado.</string>
     <string name="message_custom_channel_updated">Canal actualizado.</string>
     <string name="message_custom_channel_deleted">Canal borrado.</string>
+
+    <!--
+        Interfaz de TV, barra de navegación y pantalla de inicio (S2/S3). Este archivo conserva
+        literalmente el texto del diseño aprobado; values/strings.xml es su traducción al inglés y
+        ambos deben mantenerse en sincronía (AGENTS.md).
+    -->
+    <string name="brand_subtitle">IPTV Server</string>
+    <string name="nav_home">Inicio</string>
+    <string name="nav_channels">Canales</string>
+    <string name="nav_sources">Fuentes</string>
+    <string name="nav_connections">Conexiones</string>
+    <string name="nav_settings">Ajustes</string>
+    <string name="nav_item_description">Sección %1$s</string>
+    <string name="hint_select">OK para seleccionar</string>
+    <string name="hint_back">Atrás para volver</string>
+
+    <string name="home_title">Inicio</string>
+    <string name="home_subtitle">Servidor IPTV con AceStream, proxy HTTP e IPFS opcional</string>
+    <string name="server_state_running_heading">Servidor funcionando</string>
+    <string name="server_state_running_ready">Listo para tu reproductor IPTV</string>
+    <string name="server_state_running_body">HaP está sirviendo tus canales correctamente.</string>
+    <string name="server_state_starting_heading">Iniciando el servidor</string>
+    <string name="server_state_starting_ready">Arrancando los servicios</string>
+    <string name="server_state_starting_body">Espera unos segundos, esto puede tardar un poco.</string>
+    <string name="server_state_stopped_heading">Servidor detenido</string>
+    <string name="server_state_stopped_ready">El servidor no está activo</string>
+    <string name="server_state_stopped_body">Actívalo abajo para empezar a ver tus canales.</string>
+    <string name="server_state_error_heading">El servidor tiene un problema</string>
+    <string name="server_state_error_ready">Algo no ha funcionado</string>
+    <string name="server_state_error_body">Revisa el mensaje de error y vuelve a iniciar HaP.</string>
+    <string name="home_cta_title">Cómo ver mis canales</string>
+    <string name="home_cta_subtitle">Conectar TiviMate, StreamVault u otro reproductor</string>
+    <string name="home_cta_placeholder_message">HaP no reproduce vídeo. Conecta TiviMate, StreamVault u otro reproductor IPTV con la URL /aio que aparece en Conexiones.</string>
+    <string name="home_card_description">%1$s. %2$s</string>
+    <string name="home_lists_title">Mis listas</string>
+    <string name="home_lists_subtitle">Gestionar listas M3U y canales personalizados</string>
+    <string name="home_channels_title">Comprobar canales</string>
+    <string name="home_channels_subtitle">Verificar disponibilidad y estado</string>
+    <string name="services_heading">Estado de los servicios</string>
+    <string name="service_aceserve_detail">Caché: 100 MiB</string>
+    <string name="service_proxy_name">Proxy HTTP</string>
+    <string name="service_proxy_detail">Puerto: 8888</string>
+    <string name="service_ipfs_name">IPFS (Kubo)</string>
+    <string name="service_ipfs_detail">Función opcional</string>
+    <string name="service_state_active">Activo</string>
+    <string name="service_state_active_feminine">Activa</string>
+    <string name="service_state_disabled">Desactivado</string>
+    <string name="service_state_stopped">Detenido</string>
+    <string name="service_state_starting">Iniciando</string>
+    <string name="service_state_error">Error</string>
+    <string name="hap_enable_switch_description">Iniciar o detener el servidor HaP</string>
+    <string name="button_close">Cerrar</string>
 
     <!-- Actualizaciones (GitHub Releases). Mantener en sincronía con values/strings.xml. -->
     <string name="section_updates">Actualizaciones</string>

@@ -2,7 +2,67 @@
 <resources>
     <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowBackground">#07111B</item>
-        <item name="android:colorAccent">#69A8FF</item>
+        <item name="android:windowBackground">@color/hap_surface_page</item>
+        <item name="android:colorAccent">@color/hap_accent</item>
+        <item name="android:colorEdgeEffect">@color/hap_accent</item>
+    </style>
+
+    <!-- Base of the HaP widget styles; the dotted names below inherit from it. -->
+    <style name="Widget.HaP" parent="@android:style/Widget" />
+
+    <!--
+        Type scale of the approved mockup, sized for a 10-foot interface: display 34sp,
+        title 26sp, subtitle 18sp, body 16sp, caption 14sp. Screens apply these through
+        android:textAppearance or TextView#setTextAppearance and only override the colour when a
+        surface needs it (for example a caption on the accent CTA).
+    -->
+    <style name="TextAppearance.HaP" parent="@android:style/TextAppearance">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:textColor">@color/hap_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.HaP.Display">
+        <item name="android:textSize">34sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/hap_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.HaP.Title">
+        <item name="android:textSize">26sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/hap_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.HaP.Subtitle">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/hap_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.HaP.Body">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/hap_text_primary</item>
+    </style>
+
+    <style name="TextAppearance.HaP.Caption">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/hap_text_muted</item>
+    </style>
+
+    <!--
+        A rail entry: one line of subtitle text on the shared nav-item state list. Layout
+        parameters stay in the layout file on purpose: a style cannot reliably carry layout_*
+        attributes, because layout params are read without resolving the style resource.
+    -->
+    <style name="Widget.HaP.NavItem">
+        <item name="android:background">@drawable/bg_nav_item</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">@dimen/hap_nav_item_padding</item>
+        <item name="android:paddingEnd">@dimen/hap_nav_item_padding</item>
+        <item name="android:textAppearance">@style/TextAppearance.HaP.Subtitle</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
     </style>
 </resources>

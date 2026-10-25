@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focused card: the same panel with a 2dp accent outline, nothing else. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/hap_surface_panel" />
+    <stroke
+        android:width="@dimen/hap_focus_stroke"
+        android:color="@color/hap_accent" />
+    <corners android:radius="@dimen/hap_card_radius" />
+</shape>

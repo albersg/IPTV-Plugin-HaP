@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HaP dimensions for narrow screens (phones, small tablets).
+
+    The TV values of the approved mockup live in res/values-w600dp/dimens.xml: a 300dp rail and
+    the 48dp/32dp TV-safe inset. The qualifier is *available width*, not smallest width, because
+    an Android TV box usually reports 960x540dp: its width matches a TV comfortably while its
+    smallest width does not. On a phone those numbers would leave no room for content, so the same
+    names carry smaller values here. Both files must define the same names.
+-->
+<resources>
+    <dimen name="hap_screen_padding_horizontal">16dp</dimen>
+    <dimen name="hap_screen_padding_vertical">16dp</dimen>
+
+    <dimen name="hap_rail_width">168dp</dimen>
+    <dimen name="hap_rail_content_gap">12dp</dimen>
+    <dimen name="hap_nav_item_height">48dp</dimen>
+    <dimen name="hap_nav_item_padding">12dp</dimen>
+
+    <dimen name="hap_gap_block">16dp</dimen>
+    <dimen name="hap_gap_row">10dp</dimen>
+
+    <dimen name="hap_card_padding">16dp</dimen>
+    <dimen name="hap_card_radius">12dp</dimen>
+    <dimen name="hap_nav_radius">10dp</dimen>
+    <dimen name="hap_focus_stroke">2dp</dimen>
+    <dimen name="hap_hairline">1dp</dimen>
+
+    <dimen name="hap_status_dot">10dp</dimen>
+    <dimen name="hap_chevron">20dp</dimen>
+</resources>

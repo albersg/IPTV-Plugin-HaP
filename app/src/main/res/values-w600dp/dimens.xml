@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HaP dimensions for the 10-foot interface: the approved mockup's 300dp navigation rail and its
+    inset of 48dp horizontal / 32dp vertical (TV safe area). Same names as res/values/dimens.xml,
+    which carries the smaller phone values.
+-->
+<resources>
+    <dimen name="hap_screen_padding_horizontal">48dp</dimen>
+    <dimen name="hap_screen_padding_vertical">32dp</dimen>
+
+    <dimen name="hap_rail_width">300dp</dimen>
+    <dimen name="hap_rail_content_gap">32dp</dimen>
+    <dimen name="hap_nav_item_height">56dp</dimen>
+    <dimen name="hap_nav_item_padding">20dp</dimen>
+
+    <dimen name="hap_gap_block">24dp</dimen>
+    <dimen name="hap_gap_row">12dp</dimen>
+
+    <dimen name="hap_card_padding">24dp</dimen>
+    <dimen name="hap_card_radius">12dp</dimen>
+    <dimen name="hap_nav_radius">10dp</dimen>
+    <dimen name="hap_focus_stroke">2dp</dimen>
+    <dimen name="hap_hairline">1dp</dimen>
+
+    <dimen name="hap_status_dot">12dp</dimen>
+    <dimen name="hap_chevron">24dp</dimen>
+</resources>

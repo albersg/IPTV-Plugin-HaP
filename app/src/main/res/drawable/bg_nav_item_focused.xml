@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focused but not selected: the accent outline alone. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+    <stroke
+        android:width="@dimen/hap_focus_stroke"
+        android:color="@color/hap_accent" />
+    <corners android:radius="@dimen/hap_nav_radius" />
+</shape>

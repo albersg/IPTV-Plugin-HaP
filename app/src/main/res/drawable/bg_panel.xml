@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A panel/card surface. Focusable cards share it: the accent outline is the whole focus language. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:drawable="@drawable/bg_panel_focused" />
+    <item android:state_pressed="true" android:drawable="@drawable/bg_panel_focused" />
+    <item android:drawable="@drawable/bg_panel_idle" />
+</selector>

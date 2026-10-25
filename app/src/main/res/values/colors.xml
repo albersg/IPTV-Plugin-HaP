@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HaP palette for the TV-first redesign, used by layouts, drawables and styles.
+
+    The panels that HapConfigActivity builds in code carry the same values as COLOR_* constants,
+    because they cannot read resources in a static field; keep both lists identical when the
+    palette changes. Only the colours the XML itself uses live here, so nothing rots unused.
+-->
+<resources>
+    <!-- Surfaces -->
+    <color name="hap_surface_page">#0B1526</color>
+    <color name="hap_surface_panel">#101E36</color>
+    <color name="hap_surface_raised">#16243F</color>
+
+    <!-- Hairlines and outlines -->
+    <color name="hap_hairline">#22314F</color>
+
+    <!-- Accent -->
+    <color name="hap_accent">#2F6BFF</color>
+    <color name="hap_accent_pressed">#2557D6</color>
+
+    <!-- Status -->
+    <color name="hap_success">#3DDC84</color>
+    <color name="hap_warning">#F4C430</color>
+    <color name="hap_error">#FF6B6B</color>
+    <color name="hap_status_off">#5B6C88</color>
+
+    <!-- Text -->
+    <color name="hap_text_primary">#FFFFFF</color>
+    <color name="hap_text_muted">#9FB1CC</color>
+    <color name="hap_text_on_accent">#E6EEFF</color>
+</resources>

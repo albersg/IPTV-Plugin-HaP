@@ -1,6 +1,7 @@
 package com.streamvault.plugin.hap;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -18,12 +19,16 @@ import android.os.SystemClock;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
+import android.util.SparseArray;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -64,23 +69,25 @@ public class HapConfigActivity extends Activity {
     private static final int CHANNEL_TEST_SINGLE_MAX_WAIT_SECONDS = 12;
     /** How long a playback probe is reused before asking the proxy again. */
     private static final long PLAYBACK_PROBE_TTL_MS = 1000L;
-    private static final int COLOR_CANVAS = 0xFF07111B;
-    private static final int COLOR_PANEL = 0xEE101B2B;
-    private static final int COLOR_PANEL_SOFT = 0x99162435;
-    private static final int COLOR_SURFACE = 0xFF162435;
-    private static final int COLOR_SURFACE_FOCUSED = 0xFF1E3550;
-    private static final int COLOR_STROKE = 0xFF24364C;
-    private static final int COLOR_BRAND = 0xFF69A8FF;
-    private static final int COLOR_BRAND_MUTED = 0x332E8BFF;
-    private static final int COLOR_SUCCESS = 0xFF57D68D;
-    private static final int COLOR_SUCCESS_MUTED = 0x3357D68D;
+    /**
+     * Palette of the approved mockup, mirroring res/values/colors.xml. These constants exist
+     * because the panels below build their views in code; keep both lists identical.
+     */
+    private static final int COLOR_PANEL_SOFT = 0x8016243F;
+    private static final int COLOR_SURFACE = 0xFF16243F;
+    private static final int COLOR_SURFACE_FOCUSED = 0xFF1E3057;
+    private static final int COLOR_STROKE = 0xFF22314F;
+    private static final int COLOR_BRAND = 0xFF2F6BFF;
+    private static final int COLOR_BRAND_MUTED = 0x332F6BFF;
+    private static final int COLOR_SUCCESS = 0xFF3DDC84;
+    private static final int COLOR_SUCCESS_MUTED = 0x333DDC84;
     private static final int COLOR_WARNING = 0xFFF4C430;
     private static final int COLOR_WARNING_MUTED = 0x33F4C430;
     private static final int COLOR_ERROR = 0xFFFF6B6B;
     private static final int COLOR_ERROR_MUTED = 0x33FF6B6B;
-    private static final int COLOR_TEXT_PRIMARY = 0xFFF5F7FB;
-    private static final int COLOR_TEXT_SECONDARY = 0xFFBBC6D8;
-    private static final int COLOR_TEXT_TERTIARY = 0xFF7F8DA5;
+    private static final int COLOR_TEXT_PRIMARY = 0xFFFFFFFF;
+    private static final int COLOR_TEXT_SECONDARY = 0xFF9FB1CC;
+    private static final int COLOR_TEXT_TERTIARY = 0xFF7E90AC;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     /** Runs state refreshes, source/playlist changes and other user-triggered work. */
@@ -117,6 +124,15 @@ public class HapConfigActivity extends Activity {
     private final AtomicBoolean statusPollInFlight = new AtomicBoolean(false);
     private final Map<String, HapBridge.PeerResultInfo> peerResults = new HashMap<>();
     private final List<View> busyControls = new ArrayList<>();
+
+    /** One pre-built view per section, keyed by {@link HapSections.Section#ordinal()}. */
+    private final SparseArray<View> sectionViews = new SparseArray<>();
+    /** The five rail entries, in {@link HapSections.Section} order. */
+    private final List<TextView> navItems = new ArrayList<>();
+    private LinearLayout navRail;
+    private FrameLayout sectionContainer;
+    private HapSections.Section currentSection = HapSections.Section.INICIO;
+    private HomeScreen homeScreen;
 
     private Pill statePill;
     private Pill phasePill;
@@ -223,10 +239,14 @@ public class HapConfigActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(buildLayout());
+        setContentView(R.layout.activity_hap);
+        buildShell();
         refreshConfigState();
         refreshRuntimeStateNow();
         populateIpfsAdvancedFields();
+        // The update settings block is its own panel now, so its fields are filled here instead
+        // of at the end of the update panel builder.
+        populateUpdateSettingsFields();
         maybeRunAutomaticUpdateCheck();
     }
 
@@ -241,13 +261,21 @@ public class HapConfigActivity extends Activity {
 
     /**
      * Back cancels an in-flight update download instead of leaving it running behind a closing
-     * activity. Everything else keeps the default Back behaviour.
+     * activity. From any section but Inicio it returns to Inicio; on Inicio it leaves the
+     * activity, which is the default behaviour.
      */
     @SuppressWarnings("deprecation")
     @Override
     public void onBackPressed() {
         if (updateDownloadInProgress) {
             cancelUpdateDownload();
+            return;
+        }
+        HapSections.Section target = HapSections.backTarget(currentSection);
+        if (target != null) {
+            showSection(target, false);
+            TextView item = navItemFor(target);
+            if (item != null) item.requestFocus();
             return;
         }
         super.onBackPressed();
@@ -274,48 +302,258 @@ public class HapConfigActivity extends Activity {
         super.onDestroy();
     }
 
-    private View buildLayout() {
+    /**
+     * Binds the shell that {@code setContentView(R.layout.activity_hap)} just inflated and fills
+     * its content area with the five sections. Every section is built exactly once, here, and
+     * afterwards navigation only toggles visibility.
+     */
+    private void buildShell() {
+        navRail = findViewById(R.id.hap_nav_rail);
+        sectionContainer = findViewById(R.id.hap_section_container);
+        bindNavigation();
+        buildSections();
+        showSection(HapSections.Section.INICIO, false);
+    }
+
+    /** Wires the five rail entries to their section, in {@link HapSections.Section} order. */
+    private void bindNavigation() {
+        navItems.clear();
+        for (HapSections.Section section : HapSections.Section.values()) {
+            TextView item = findViewById(navItemId(section));
+            item.setContentDescription(getString(R.string.nav_item_description, item.getText()));
+            item.setOnClickListener(v -> showSection(section, false));
+            navItems.add(item);
+        }
+    }
+
+    private static int navItemId(HapSections.Section section) {
+        switch (section) {
+            case CANALES:
+                return R.id.hap_nav_channels;
+            case FUENTES:
+                return R.id.hap_nav_sources;
+            case CONEXIONES:
+                return R.id.hap_nav_connections;
+            case AJUSTES:
+                return R.id.hap_nav_settings;
+            case INICIO:
+            default:
+                return R.id.hap_nav_home;
+        }
+    }
+
+    /**
+     * Builds every section once. The panel builders are unchanged: they are only called from here
+     * now instead of being stacked in a single scroll, so nothing was rewritten or dropped.
+     */
+    private void buildSections() {
+        // The header panel (start/stop, restart, prepare /aio) lives inside the home status card
+        // and keeps its behaviour there.
+        homeScreen = new HomeScreen(this, homeListener(), buildHeaderPanel());
+        addSection(HapSections.Section.INICIO, homeScreen.getView());
+        for (HapSections.Section section : HapSections.Section.values()) {
+            if (section == HapSections.Section.INICIO) continue;
+            addSection(section, buildSectionView(section));
+        }
+    }
+
+    private void addSection(HapSections.Section section, View view) {
+        view.setVisibility(View.GONE);
+        sectionContainer.addView(view, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        sectionViews.put(section.ordinal(), view);
+    }
+
+    /** One scrollable column per section, in the order {@link HapSections} declares. */
+    private View buildSectionView(HapSections.Section section) {
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        for (HapSections.Panel panel : HapSections.panels(section)) {
+            column.addView(
+                    buildPanel(panel),
+                    column.getChildCount() == 0 ? matchWrap() : matchWrapTop(20)
+            );
+        }
+
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(false);
-        scroll.setBackgroundColor(COLOR_CANVAS);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(24), dp(22), dp(24), dp(28));
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        scroll.addView(root, new ScrollView.LayoutParams(
+        scroll.setFocusable(false);
+        scroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        scroll.addView(column, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
+        return scroll;
+    }
 
-        LinearLayout appTitleRow = new LinearLayout(this);
-        appTitleRow.setOrientation(LinearLayout.HORIZONTAL);
-        appTitleRow.setGravity(Gravity.CENTER_VERTICAL);
-        root.addView(appTitleRow, matchWrap());
+    /** Maps a panel of {@link HapSections} to its existing builder; nothing is re-implemented. */
+    private View buildPanel(HapSections.Panel panel) {
+        switch (panel) {
+            case CHANNEL_STATUS:
+                return buildChannelStatusPanel();
+            case SOURCES:
+                return buildSourcesPanel();
+            case CUSTOM_CHANNELS:
+                return buildCustomSection();
+            case AIO:
+                return buildAioPanel();
+            case EXTERNAL_PLAYERS:
+                return buildExternalPlayersPanel();
+            case CLIENTS:
+                return buildClientsPanel();
+            case IPFS:
+                return buildIpfsPanel();
+            case IPFS_ADVANCED:
+                return buildIpfsAdvancedSection();
+            case LOGS:
+                return buildLogsPanel();
+            case UPDATE:
+                return buildUpdatePanel();
+            case UPDATE_SETTINGS:
+                return buildUpdateSettingsSection();
+            case HEADER:
+            default:
+                // The status panel is built once, for the home card. Building it twice would
+                // create a second set of pills and switches behind the 1s refresh.
+                throw new IllegalStateException("Panel " + panel + " is not a section panel");
+        }
+    }
 
-        appTitleRow.addView(text(getString(R.string.screen_title), 30, COLOR_TEXT_PRIMARY, Typeface.BOLD), wrapWrap());
-        String versionName = appVersionName();
-        if (!versionName.isEmpty()) {
-            TextView versionPill = pill(getString(R.string.app_version_format, versionName), COLOR_SURFACE, COLOR_TEXT_TERTIARY);
-            versionPill.setTextSize(11);
-            appTitleRow.addView(versionPill, wrapWrapLeft(10));
+    private HomeScreen.Listener homeListener() {
+        return new HomeScreen.Listener() {
+            @Override
+            public void onOpenHowToWatch() {
+                showHowToWatchPlaceholder();
+            }
+
+            @Override
+            public void onOpenSources() {
+                showSection(HapSections.Section.FUENTES, true);
+            }
+
+            @Override
+            public void onOpenChannels() {
+                showSection(HapSections.Section.CANALES, true);
+            }
+        };
+    }
+
+    /**
+     * Placeholder for the "how to watch my channels" screen: it explains, in plain language, that
+     * HaP serves an external player instead of playing video itself (S4). T5 replaces it.
+     */
+    private void showHowToWatchPlaceholder() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.home_cta_title)
+                .setMessage(R.string.home_cta_placeholder_message)
+                .setPositiveButton(R.string.button_close, null)
+                .show();
+    }
+
+    /**
+     * Shows one section and hides the others. No view is ever removed: a section that is
+     * re-selected keeps its children, its scroll position and the state of its controls.
+     */
+    private void showSection(HapSections.Section section, boolean focusContent) {
+        if (section == null || sectionContainer == null) return;
+        currentSection = section;
+
+        for (int i = 0; i < sectionViews.size(); i++) {
+            View view = sectionViews.valueAt(i);
+            int visibility = sectionViews.keyAt(i) == section.ordinal() ? View.VISIBLE : View.GONE;
+            if (view.getVisibility() != visibility) view.setVisibility(visibility);
         }
 
-        TextView subtitle = text(getString(R.string.screen_subtitle), 14, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
-        subtitle.setPadding(0, dp(4), 0, dp(14));
-        root.addView(subtitle, matchWrap());
+        // Selected is not the same as focused: the rail shows both at once.
+        for (HapSections.Section each : HapSections.Section.values()) {
+            TextView item = navItemFor(each);
+            if (item != null && item.isSelected() != (each == section)) item.setSelected(each == section);
+        }
 
-        root.addView(buildHeaderPanel(), matchWrap());
-        root.addView(buildUpdatePanel(), matchWrapTop(12));
-        root.addView(buildExternalPlayersPanel(), matchWrapTop(12));
-        root.addView(buildIpfsPanel(), matchWrapTop(12));
-        root.addView(buildAioPanel(), matchWrapTop(12));
-        root.addView(buildSourcesPanel(), matchWrapTop(12));
-        root.addView(buildClientsPanel(), matchWrapTop(12));
-        root.addView(buildChannelStatusPanel(), matchWrapTop(12));
-        root.addView(buildLogsPanel(), matchWrapTop(12));
+        if (focusContent) {
+            View entry = firstFocusableIn(sectionView(section));
+            if (entry != null) entry.requestFocus();
+        }
+    }
 
-        return scroll;
+    private TextView navItemFor(HapSections.Section section) {
+        int index = section.ordinal();
+        return index >= 0 && index < navItems.size() ? navItems.get(index) : null;
+    }
+
+    private View sectionView(HapSections.Section section) {
+        return sectionViews.get(section.ordinal());
+    }
+
+    /**
+     * D-pad movement between the rail and the content (S6 groundwork; T6 owns the full chain).
+     *
+     * <p>RIGHT on a rail entry enters the visible section, LEFT from a view that has nothing to
+     * its left returns to the rail, and UP/DOWN are left to the platform so each column keeps its
+     * own order. LEFT is only taken when the platform finds no target and the focused view is not
+     * a text field, where LEFT belongs to the caret.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN && !destroyed) {
+            View focused = getCurrentFocus();
+            if (focused != null) {
+                if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT && isInsideRail(focused)) {
+                    View entry = firstFocusableIn(sectionView(currentSection));
+                    if (entry != null) {
+                        entry.requestFocus();
+                        return true;
+                    }
+                }
+                if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT
+                        && !(focused instanceof EditText)
+                        && isInsideSection(focused)) {
+                    View next = focused.focusSearch(View.FOCUS_LEFT);
+                    if (next == null || next == focused) {
+                        TextView item = navItemFor(currentSection);
+                        if (item != null) {
+                            item.requestFocus();
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private boolean isInsideRail(View view) {
+        return isDescendantOf(view, navRail);
+    }
+
+    private boolean isInsideSection(View view) {
+        return isDescendantOf(view, sectionView(currentSection));
+    }
+
+    private static boolean isDescendantOf(View view, View ancestor) {
+        if (view == null || ancestor == null) return false;
+        View current = view;
+        while (current != null) {
+            if (current == ancestor) return true;
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    /** First focusable, visible view in reading order; used to enter a section from the rail. */
+    private static View firstFocusableIn(View view) {
+        if (view == null || view.getVisibility() != View.VISIBLE) return null;
+        if (view.isFocusable()) return view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View found = firstFocusableIn(group.getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private View buildHeaderPanel() {
@@ -394,6 +632,8 @@ public class HapConfigActivity extends Activity {
         switchRow.addView(text(getString(R.string.label_enable_hap), 13, COLOR_TEXT_SECONDARY, Typeface.BOLD));
         enabledSwitch = new Switch(this);
         enabledSwitch.setPadding(dp(8), 0, 0, 0);
+        // The label sits next to the switch, so the control itself says what it does.
+        enabledSwitch.setContentDescription(getString(R.string.hap_enable_switch_description));
         enabledSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
             if (suppressSwitchCallbacks) return;
             setEnabled(checked);
@@ -494,8 +734,7 @@ public class HapConfigActivity extends Activity {
         ipfsGatewayContainer.setPadding(0, dp(8), 0, 0);
         panel.body.addView(ipfsGatewayContainer, matchWrap());
 
-        panel.body.addView(buildIpfsAdvancedSection(), matchWrapTop(12));
-
+        // The advanced block is its own panel in Ajustes, so it is not nested twice here.
         return panel.container;
     }
 
@@ -504,7 +743,7 @@ public class HapConfigActivity extends Activity {
         container.setOrientation(LinearLayout.VERTICAL);
 
         String title = getString(R.string.label_ipfs_advanced);
-        TextView header = text("+ " + title, 13, COLOR_TEXT_SECONDARY, Typeface.BOLD);
+        TextView header = text("+ " + title, 16, COLOR_TEXT_SECONDARY, Typeface.BOLD);
         header.setFocusable(true);
         header.setBackground(focusBackground(0x00000000, COLOR_SURFACE_FOCUSED, dp(8), 0, 0));
         header.setPadding(dp(8), dp(8), dp(8), dp(8));
@@ -937,10 +1176,8 @@ public class HapConfigActivity extends Activity {
         installLater.setOnClickListener(v -> postponeOfferedUpdate());
         confirmRow.addView(installLater, wrapWrapLeft(8));
 
-        panel.body.addView(buildUpdateSettingsSection(), matchWrapTop(12));
-
+        // The update settings block is its own panel in Ajustes; onCreate fills its fields.
         refreshUpdateInstalledLabel();
-        populateUpdateSettingsFields();
         return panel.container;
     }
 
@@ -960,12 +1197,13 @@ public class HapConfigActivity extends Activity {
         return scroll;
     }
 
-    /** Collapsible block with the automatic-check switch, interval, pre-releases and repository. */    private View buildUpdateSettingsSection() {
+    /** Collapsible block with the automatic-check switch, interval, pre-releases and repository. */
+    private View buildUpdateSettingsSection() {
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
 
         String title = getString(R.string.update_label_advanced);
-        TextView header = text("+ " + title, 13, COLOR_TEXT_SECONDARY, Typeface.BOLD);
+        TextView header = text("+ " + title, 16, COLOR_TEXT_SECONDARY, Typeface.BOLD);
         header.setFocusable(true);
         header.setBackground(focusBackground(0x00000000, COLOR_SURFACE_FOCUSED, dp(8), 0, 0));
         header.setPadding(dp(8), dp(8), dp(8), dp(8));
@@ -1608,6 +1846,17 @@ public class HapConfigActivity extends Activity {
 
         snapshot.endpoints = endpointRows(status);
         snapshot.logText = runtimeLogText(status.log);
+
+        // The words the home screen shows, decided here so the refresh stays off the main thread.
+        snapshot.services = HapServiceStates.of(
+                status.desiredRunning,
+                status.aceRunning,
+                status.proxyRunning,
+                !status.lastError.isEmpty(),
+                status.ipfsEnabled,
+                status.ipfsRunning,
+                !status.ipfsError.isEmpty()
+        );
         return snapshot;
     }
 
@@ -1641,6 +1890,9 @@ public class HapConfigActivity extends Activity {
             renderedLogText = snapshot.logText;
             logView.setText(snapshot.logText);
         }
+
+        // Only the words that changed are re-set, so a refresh never rebuilds or re-focuses.
+        if (homeScreen != null) homeScreen.applyServices(snapshot.services);
     }
 
     private void applyCaption(TextView view, String text) {
@@ -1764,10 +2016,9 @@ public class HapConfigActivity extends Activity {
         HapBridge.SourceInfo custom = customSource();
         if (custom != null) {
             sourcesListContainer.addView(sourceRow(custom), matchWrapTop(10));
-            if (custom.selected) {
-                sourcesListContainer.addView(buildCustomSection(), matchWrapTop(10));
-                renderCustomChannels();
-            }
+            // The custom channel list has its own panel in Fuentes now, so this only refreshes
+            // it instead of building a second copy inside the sources panel.
+            renderCustomChannels();
         }
     }
 
@@ -2676,14 +2927,16 @@ public class HapConfigActivity extends Activity {
     private PanelViews panel(String title, boolean collapsible, boolean expandedByDefault) {
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding(dp(16), dp(16), dp(16), dp(16));
-        container.setBackground(roundRect(COLOR_PANEL, dp(16), dp(1), COLOR_STROKE));
+        int cardPadding = getResources().getDimensionPixelSize(R.dimen.hap_card_padding);
+        container.setPadding(cardPadding, cardPadding, cardPadding, cardPadding);
+        // The shared state list: a panel that becomes focusable uses the same focus language.
+        container.setBackgroundResource(R.drawable.bg_panel);
 
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
 
         if (title != null && !title.trim().isEmpty()) {
-            TextView header = text(title, 17, COLOR_TEXT_PRIMARY, Typeface.BOLD);
+            TextView header = text(title, 18, COLOR_TEXT_PRIMARY, Typeface.BOLD);
             header.setSingleLine(true);
             header.setEllipsize(TextUtils.TruncateAt.END);
             if (collapsible) {
@@ -2884,6 +3137,7 @@ public class HapConfigActivity extends Activity {
         String ipfsGatewayUrl;
         List<EndpointModel> endpoints;
         String logText;
+        HapServiceStates services;
     }
 
     private static final class EndpointModel {

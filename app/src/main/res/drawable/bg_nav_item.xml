@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Rail entry. Selected and focused are two different things and both must stay visible:
+    the selected entry keeps its filled surface and accent bar while a focused one adds the
+    accent outline, and the two combined states are resolved first so the fill never disappears
+    under the outline.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:state_focused="true"
+        android:state_selected="true"
+        android:drawable="@drawable/bg_nav_item_selected_focused" />
+    <item
+        android:state_focused="true"
+        android:drawable="@drawable/bg_nav_item_focused" />
+    <item
+        android:state_selected="true"
+        android:drawable="@drawable/bg_nav_item_selected" />
+    <item android:drawable="@android:color/transparent" />
+</selector>

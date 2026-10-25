@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HaP shell: a fixed navigation rail on the left, the current section on the right, and the
+    persistent key-hint footer of the design.
+
+    The rail is the only place that knows the five sections; the content FrameLayout is filled
+    once by HapConfigActivity with one pre-built view per section, and navigating only toggles
+    visibility, so no section is ever rebuilt or loses its scroll position.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/hap_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/hap_screen_padding_horizontal"
+    android:paddingTop="@dimen/hap_screen_padding_vertical"
+    android:paddingEnd="@dimen/hap_screen_padding_horizontal"
+    android:paddingBottom="@dimen/hap_screen_padding_vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <ScrollView
+            android:layout_width="@dimen/hap_rail_width"
+            android:layout_height="match_parent"
+            android:focusable="false"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/hap_nav_rail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="@dimen/hap_gap_block">
+
+                <TextView
+                    android:id="@+id/hap_brand_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="@dimen/hap_nav_item_padding"
+                    android:paddingEnd="@dimen/hap_nav_item_padding"
+                    android:text="@string/app_name"
+                    android:textAppearance="@style/TextAppearance.HaP.Display" />
+
+                <TextView
+                    android:id="@+id/hap_brand_subtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="@dimen/hap_nav_item_padding"
+                    android:paddingEnd="@dimen/hap_nav_item_padding"
+                    android:paddingBottom="@dimen/hap_gap_block"
+                    android:text="@string/brand_subtitle"
+                    android:textAppearance="@style/TextAppearance.HaP.Caption" />
+
+                <TextView
+                    android:id="@+id/hap_nav_home"
+                    style="@style/Widget.HaP.NavItem"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/hap_nav_item_height"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/nav_home" />
+
+                <TextView
+                    android:id="@+id/hap_nav_channels"
+                    style="@style/Widget.HaP.NavItem"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/hap_nav_item_height"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/nav_channels" />
+
+                <TextView
+                    android:id="@+id/hap_nav_sources"
+                    style="@style/Widget.HaP.NavItem"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/hap_nav_item_height"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/nav_sources" />
+
+                <TextView
+                    android:id="@+id/hap_nav_connections"
+                    style="@style/Widget.HaP.NavItem"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/hap_nav_item_height"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/nav_connections" />
+
+                <TextView
+                    android:id="@+id/hap_nav_settings"
+                    style="@style/Widget.HaP.NavItem"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/hap_nav_item_height"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/nav_settings" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!--
+            The content area is the only weighted child: it has to take the width the fixed rail
+            leaves. The single extra measure pass this causes is the price of the rail staying a
+            fixed 300dp, and it is paid only on layout, never on a state refresh.
+        -->
+        <FrameLayout
+            android:id="@+id/hap_section_container"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="@dimen/hap_rail_content_gap"
+            android:layout_weight="1"
+            tools:ignore="NestedWeights" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/hap_hairline"
+        android:layout_marginTop="@dimen/hap_gap_block"
+        android:background="@color/hap_hairline" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/hap_gap_row"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/hap_hint_select"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/hint_select"
+            android:textAppearance="@style/TextAppearance.HaP.Caption" />
+
+        <TextView
+            android:id="@+id/hap_hint_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/hap_gap_block"
+            android:text="@string/hint_back"
+            android:textAppearance="@style/TextAppearance.HaP.Caption" />
+    </LinearLayout>
+</LinearLayout>
