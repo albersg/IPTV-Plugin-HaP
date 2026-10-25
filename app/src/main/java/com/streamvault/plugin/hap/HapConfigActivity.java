@@ -2967,7 +2967,29 @@ public class HapConfigActivity extends Activity {
         }
 
         List<HapRows.Channel> rows = new ArrayList<>(selectedPlugin.channels.size());
-        for (HapBridge.ChannelInfo channel : selectedPlugin.channels) {
+        // Working channels first, then by peers: a list of hundreds is only useful if the ones that
+        // answer are at the top. Untested channels keep their alphabetical order below the ranked ones.
+        List<HapBridge.ChannelInfo> ordered = ChannelRanking.order(
+                selectedPlugin.channels,
+                channel -> channel.contentId,
+                channel -> channel.name,
+                contentId -> {
+                    HapBridge.PeerResultInfo result = peerResults.get(contentId);
+                    if (result == null) return null;
+                    return new ChannelRanking.Score() {
+                        @Override
+                        public boolean available() {
+                            return result.available;
+                        }
+
+                        @Override
+                        public int peers() {
+                            return result.totalPeers;
+                        }
+                    };
+                }
+        );
+        for (HapBridge.ChannelInfo channel : ordered) {
             if (!ChannelSearch.matches(channel.name, channelQuery)) continue;
             HapBridge.PeerResultInfo result = peerResults.get(channel.contentId);
             boolean selected = channel.contentId.equals(selectedChannelContentId);
