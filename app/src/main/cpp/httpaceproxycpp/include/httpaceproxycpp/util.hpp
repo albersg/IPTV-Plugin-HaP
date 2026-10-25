@@ -27,6 +27,14 @@ std::string shell_quote_for_log(std::string_view value);
 // first segment so a log still says which endpoint was called.
 std::string redact_request_target(std::string_view target);
 
+// True when a value carries CR, LF or another C0 control byte (tab excluded: it is legal inside a
+// channel name). Such a value would be read as a second line by the AceStream control protocol.
+bool has_control_characters(std::string_view value);
+
+// The address to attribute a request to. A forwarded header is respected only when the request
+// really came from a local reverse proxy, because otherwise the client writes it itself.
+std::string effective_client_address(std::string_view peer_address, std::string_view forwarded);
+
 // Keeps scheme, host and port of a URL and drops the rest, which is where tokens and credentials
 // travel. Returns "<redacted>" when there is no scheme to keep.
 std::string redact_url(std::string_view url);

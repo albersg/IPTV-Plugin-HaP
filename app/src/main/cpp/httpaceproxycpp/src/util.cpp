@@ -159,6 +159,29 @@ std::string shell_quote_for_log(std::string_view value) {
     return "'" + replace_all(std::string(value), "'", "'\\''") + "'";
 }
 
+bool has_control_characters(std::string_view value) {
+    for (char c : value) {
+        unsigned char byte = static_cast<unsigned char>(c);
+        if (byte == '\r' || byte == '\n' || (byte < 0x20 && byte != '\t')) return true;
+    }
+    return false;
+}
+
+namespace {
+bool is_loopback_address(std::string_view ip) {
+    return ip == "::1" || ip.rfind("127.", 0) == 0;
+}
+} // namespace
+
+std::string effective_client_address(std::string_view peer_address, std::string_view forwarded) {
+    if (is_loopback_address(peer_address) && !forwarded.empty()) {
+        auto comma = forwarded.find(',');
+        std::string first(forwarded.substr(0, comma));
+        return trim(first);
+    }
+    return std::string(peer_address);
+}
+
 std::string redact_request_target(std::string_view target) {
     auto query = target.find('?');
     std::string path(target.substr(0, query));

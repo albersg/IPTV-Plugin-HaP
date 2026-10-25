@@ -301,3 +301,29 @@ TEST(RedactUrl, KeepsSchemeHostAndPortOnly) {
 TEST(RedactUrl, RefusesToEchoSomethingWithoutAScheme) {
     EXPECT_EQ(httpace::redact_url("not a url with a secret"), "<redacted>");
 }
+
+// --- Engine command safety and client attribution --------------------------------------------
+
+TEST(ControlCharacters, RejectsLineBreaksThatWouldEscapeTheProtocol) {
+    EXPECT_TRUE(httpace::has_control_characters("abc\rSHUTDOWN"));
+    EXPECT_TRUE(httpace::has_control_characters("abc\nSHUTDOWN"));
+    EXPECT_TRUE(httpace::has_control_characters(std::string("abc\0def", 7)));
+}
+
+TEST(ControlCharacters, AllowsWhatAChannelNameLegitimatelyContains) {
+    EXPECT_FALSE(httpace::has_control_characters("Canal HD 1"));
+    EXPECT_FALSE(httpace::has_control_characters("name\twith tab"));
+    EXPECT_FALSE(httpace::has_control_characters(""));
+}
+
+TEST(EffectiveClientAddress, IgnoresAHeaderThatTheClientWroteItself) {
+    // The audit's payload: a LAN peer claims to be inside the allow list.
+    EXPECT_EQ(httpace::effective_client_address("192.168.1.50", "192.168.1.10"), "192.168.1.50");
+    EXPECT_EQ(httpace::effective_client_address("10.0.0.7", "127.0.0.1"), "10.0.0.7");
+}
+
+TEST(EffectiveClientAddress, TrustsTheHeaderOnlyFromALocalProxy) {
+    EXPECT_EQ(httpace::effective_client_address("127.0.0.1", "10.0.0.9, 10.0.0.8"), "10.0.0.9");
+    EXPECT_EQ(httpace::effective_client_address("::1", " 8.8.8.8 "), "8.8.8.8");
+    EXPECT_EQ(httpace::effective_client_address("127.0.0.1", ""), "127.0.0.1");
+}
