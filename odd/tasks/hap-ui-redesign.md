@@ -174,3 +174,30 @@ the real view tree rather than applying it blindly.
 T7 brief: replace the eight `removeAllViews()` renderers with in-place updates or a recycler where
 the list can grow, keeping stable identities so focus is not lost. Measure by reasoning about
 allocation counts per refresh; no device is available to measure jank.
+
+**L11 — end of the autonomous run: T1-T8 delivered, device verification owed.** Every task in the
+table above is implemented and committed, with the S# each one serves recorded in its commit message.
+
+| Task | Commit | Evidence |
+| --- | --- | --- |
+| T1-T4 | `b2e53ee` | shell, home, all eleven panels re-hosted; `HapSectionsTest` pins one call each |
+| T5 | `21f16d6` | `ConnectPlayerActivity`; addresses come from `HapBridge`, never composed |
+| T6 | `bb35710` | `FocusGrid` pure rule, 17 tests, RED observed; `FocusNavigator` owns the D-pad |
+| T7 | `3797db9` | all eight `removeAllViews()` gone; `ListPatch`/`InPlaceList`/`HapRows`, 17 tests |
+| T8 | `068438d` | `FirstRunDecision` pure rule, 8 tests; card offered only while nothing is configured |
+
+Test totals: 99 JVM tests, 0 failures (30 before this work began). Native suite: 38, 0 failures.
+Lint: 0 errors, warnings identical to the pre-redesign baseline plus the two deliberate
+`ApplySharedPref` the wizard's durable `commit()` adds.
+
+**The debt this run leaves, stated plainly.** Nothing here has been seen on a television. The
+build, the tests and lint prove the code is coherent and internally consistent; they prove nothing
+about how it looks, how the remote feels, or whether a 1 Hz refresh keeps focus. `docs/Tv-Verification-Checklist.md`
+is the list that settles it, section by section, and it should be run before any of this is called
+finished. The Views decision in `docs/Decisions-UI-Toolkit.md` stays conditional until it passes.
+
+**An installable build exists.** `hap-ui-redesign-armv7-release.apk` (67,029,254 B) is staged in
+`C:\Users\alber\hap-tools`. It is `versionCode 16` / `1.4.1`, `armeabi-v7a`, signed with the same key
+as the installed build (certificate SHA-256 `b9f4146a7bfa18dde3a864f1f93f34489068ca6d19bd960c96a849ac16ae1f51`,
+verified with `apksigner`), so `adb install -r` replaces it in place and keeps data. No tag was
+published: a release should follow a device pass, not precede it.
