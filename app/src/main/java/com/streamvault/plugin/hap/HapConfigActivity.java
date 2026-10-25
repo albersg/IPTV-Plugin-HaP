@@ -1388,12 +1388,18 @@ public class HapConfigActivity extends Activity {
     /** One event line. Text only, but focusable so the D-pad can walk the list. */
     private final class EventRow implements InPlaceList.Row<EventCatalog.Event> {
         private final TextView view;
+        private EventCatalog.Event event;
 
         EventRow() {
             view = text("", 14, COLOR_TEXT_PRIMARY, Typeface.NORMAL);
             view.setFocusable(true);
             view.setFocusableInTouchMode(true);
             view.setLayoutParams(matchWrap());
+            view.setOnClickListener(v -> {
+                if (event == null || event.channelIds.isEmpty()) return;
+                // The first channel of the event: the list is already in the order the playlist uses.
+                launchChannel(event.channelIds.get(0), event.title);
+            });
         }
 
         @Override
@@ -1403,6 +1409,7 @@ public class HapConfigActivity extends Activity {
 
         @Override
         public void bind(EventCatalog.Event event) {
+            this.event = event;
             String time = event.startMillis <= 0 ? "--:--"
                     : new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
                             .format(new java.util.Date(event.startMillis));
@@ -3334,17 +3341,27 @@ public class HapConfigActivity extends Activity {
      * AceStream's own app for it.
      */
     private void watchChannel(HapRows.Channel channel) {
-        if (channel.contentId == null || channel.contentId.trim().isEmpty()) return;
+        launchChannel(channel.contentId, channel.name);
+    }
+
+    /**
+     * Opens one channel in whatever player handles an AceStream link.
+     *
+     * <p>Split out of {@link #watchChannel} so an event row can launch the same way the channel list does,
+     * without building a channel row it does not have.
+     */
+    private void launchChannel(String contentId, String name) {
+        if (contentId == null || contentId.trim().isEmpty()) return;
         // AceStream Pro is a player, but for acestream:// links: handed an http URL it treats it as its
         // own API query and answers "analyze failed". So the channel goes out on the protocol that app
         // speaks, the same way every other IPTV app launches it. That makes AceStream do the P2P itself,
         // which is also why this path does not depend on the embedded engine's broadcast.
         Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setData(Uri.parse("acestream://" + channel.contentId));
+        intent.setData(Uri.parse("acestream://" + contentId));
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(intent);
-            renderChannelFeedback(getString(R.string.message_watching_channel, channel.name));
+            renderChannelFeedback(getString(R.string.message_watching_channel, name));
         } catch (ActivityNotFoundException e) {
             renderChannelFeedback(getString(R.string.error_no_video_player));
         }

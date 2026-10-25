@@ -151,3 +151,32 @@ mapa vacío a `EventCatalog`— no del catálogo, que en escritorio produjo 43 e
 pendiente hasta corregir la op.
 
 `heapUsedMb` tampoco se registra como buena: mide el montón en el instante final, no el pico.
+
+## El filtro por deporte, verificado con la guía real y la lista real
+
+Mismo banco que la medición anterior: `guiatv.xml` (34,7 MB), `lista-unificada.m3u` (388 canales), código
+de producción. Eventos en emisión ahora, y qué deja cada filtro:
+
+| Filtro | Eventos | Ejemplos reales |
+| --- | --- | --- |
+Todos | **43** | — |
+Fútbol | **22** | M+ LALIGA 3, M+ Liga de Campeones 3, M+ Liga de Campeones 4 |
+Baloncesto | **3** | M+ Baloncesto, DAZN Baloncesto, M+ Baloncesto 3 |
+Motor | **1** | SS18 Full Stage Replay - Rally Sweden 2024 |
+Tenis | **1** | Tennis: WTA 500 · Finale, Ningbo Open |
+Ciclismo | **1** | Merckx: el caníbal del ciclismo |
+Sin clasificar | **15** | títulos que no nombran deporte |
+
+La aritmética cierra: 22 + 3 + 1 + 1 + 1 = **28 clasificados**, más **15 sin clasificar**, son los **43**
+eventos. Ningún evento se cuenta dos veces y ninguno se pierde por el camino, que es la propiedad que el
+filtro tenía que cumplir.
+
+Dos aciertos y un matiz honesto:
+- «Rally Sweden» cae en Motor por la palabra *rally*, sin que nadie lo haya etiquetado.
+- «Tennis: WTA 500» cae en Tenis por *tennis*.
+- «Merckx: el caníbal del ciclismo» cae en Ciclismo: es un documental sobre un ciclista, no una carrera. La
+  clasificación por título acierta el tema y no el formato, y eso es lo que se puede pedir a una heurística
+  cuando la guía no trae género.
+
+No verificado en la caja: pulsar los chips en pantalla. La lógica que deciden los chips es la que produce
+esta tabla; lo que falta es el recorrido con el mando.
