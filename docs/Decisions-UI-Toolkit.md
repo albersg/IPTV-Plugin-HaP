@@ -59,8 +59,25 @@ only changed properties, no per-tick allocation), `HapBridge.status()` moved off
 the main thread, channel testing moved off the shared executor, and real
 cancellation for in-flight requests.
 
+The interface was then rebuilt on Views rather than migrated. `HapConfigActivity`
+became a shell with a five-section rail beside a content area, `HomeScreen` builds
+the plain-language home, and `ConnectPlayerActivity` is the how-to-watch screen.
+
+Navigation was the condition attached to this decision, so it was attacked
+directly instead of inherited from the platform: `FocusGrid` is a pure row/column
+model with no Android dependency, pinned by 17 tests, and `FocusNavigator` derives
+the graph from the live view tree on every press and owns movement, scroll-follows-
+focus, per-section anchors and the repair of focus dropped by a rebuild. Geometric
+`focusSearch` is no longer consulted for D-pad movement.
+
 ## Limitations of this decision
 
+- **The condition is not yet discharged.** Navigation and focus are implemented and
+  unit-tested, but none of it has been observed on the device. The decision to keep
+  Views stands or falls on `docs/Tv-Verification-Checklist.md` being run and passing:
+  real focus rectangles, the platform's own `checkFocus` interplay, a full D-pad
+  journey, focus surviving the 1 Hz refresh, and large lists staying responsive.
+  Until then this remains a decision, not a settled outcome.
 - It is **not** backed by an A/B benchmark of Compose versus Views on this device.
   Producing one would mean building both variants and measuring frame timing and
   memory; that was not done, and this document does not claim it was.
@@ -68,6 +85,7 @@ cancellation for in-flight requests.
   large channel grid with artwork, filtering and hero rows), revisit this
   decision for **that screen only**, with a measured prototype and a stable,
   non-beta Compose TV foundation.
-- The unused version catalog should eventually be either wired up or trimmed. A
-  catalog that advertises dependencies the build does not use misleads every
-  reader, including this audit at first glance.
+- The unused version catalog was trimmed to the three aliases the build actually
+  references, with a comment stating the rule for adding another. A catalog that
+  advertises dependencies the build does not use misleads every reader, including
+  this audit at first glance.
