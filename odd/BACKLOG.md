@@ -23,10 +23,15 @@ no host to name. Options: (a) close the service now and reopen it when StreamVau
 channel has never been played with it. A tag published now would ship a UI validated only as far as
 the shell, the states and the proxy.
 
-**D3 — RecyclerView.** No list became a recycler: `androidx.recyclerview` is not on the classpath and
-adding it was forbidden. In-place rebinding is cheap for the short lists, but the channel list binds
-every row into memory rather than a viewport. Adding the dependency is a one-line change with a
-real benefit; the decision was left to the human.
+**D3 — RecyclerView. Done**, `02f6d09`. The human approved the dependency; the channel list now runs on
+a `ListAdapter` with a `DiffUtil` callback over the row value model, so an unchanged tick dispatches
+nothing, and the other five lists stay in place where they are cheaper. The one exception to the
+"never delegate a vertical press" rule is narrow and pinned by a pure unit: it fires only for a direct
+recycler child that has a row beyond it, which is what lets the list scroll at all.
+
+Still owed for D3: seeing it work on the box. The code is installed and has not crashed, and the
+process stayed alive with nothing in logcat, but Google TV's ambient screensaver kept taking the
+screen during the check, so the channel list itself has never been looked at with rows in it.
 
 ## 2. Verification owed on the device
 
