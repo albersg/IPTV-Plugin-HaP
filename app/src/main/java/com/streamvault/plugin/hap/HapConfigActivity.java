@@ -137,6 +137,11 @@ public class HapConfigActivity extends Activity {
      */
     private FocusNavigator focusNavigator;
     private HomeScreen homeScreen;
+    /**
+     * Whether the first-run assistant was opened from here, so coming back re-reads the sources it
+     * may have added. Without it the Fuentes list would stay on the model it had at launch.
+     */
+    private boolean firstRunOpened;
 
     private Pill statePill;
     private Pill phasePill;
@@ -276,6 +281,15 @@ public class HapConfigActivity extends Activity {
         // canales" screen puts the user back on the control that opened it, but only when nothing
         // else kept the focus.
         if (focusNavigator != null) focusNavigator.restoreFocus();
+        // Coming back from the first-run assistant can have changed its answer, so it is read
+        // again instead of being remembered from launch.
+        resolveFirstRunOffer();
+        // The assistant can also have added a list, and only the sources list knows that: re-read
+        // it through the existing refresh, once, on the way back.
+        if (firstRunOpened) {
+            firstRunOpened = false;
+            refreshConfigState();
+        }
     }
 
     /**
@@ -477,7 +491,37 @@ public class HapConfigActivity extends Activity {
             public void onOpenChannels() {
                 showSection(HapSections.Section.CANALES, true);
             }
+
+            @Override
+            public void onOpenFirstRun() {
+                // An explicit Intent: the assistant is part of HaP, not an exported action, and it
+                // never opens by itself on launch.
+                firstRunOpened = true;
+                startActivity(new Intent(HapConfigActivity.this, FirstRunActivity.class));
+            }
         };
+    }
+
+    /**
+     * Decides whether the first-run card is offered, off the main thread (T8).
+     *
+     * <p>Both inputs touch disk — the user's stored M3U lists and the two wizard decisions — so the
+     * question runs on the work executor and only the answer reaches the main thread. Tasks queue
+     * on one thread and their results are posted back in the same order, so the last answer applied
+     * is always the newest one; a launch, a resume and a config change cannot race.
+     */
+    private void resolveFirstRunOffer() {
+        if (destroyed) return;
+        try {
+            workExecutor.execute(() -> {
+                boolean offer = FirstRunStore.shouldOfferNow(this);
+                main(() -> {
+                    if (!destroyed && homeScreen != null) homeScreen.applyFirstRunOffer(offer);
+                });
+            });
+        } catch (RejectedExecutionException ignored) {
+            // The activity is tearing down: the card keeps the state it already has.
+        }
     }
 
     /**
@@ -1970,6 +2014,8 @@ public class HapConfigActivity extends Activity {
         currentSources = HapBridge.sources(this);
         currentCustomChannels = HapBridge.customChannels(this);
         renderSources();
+        // Adding or removing a list is what changes the first-run answer, so it is re-read here.
+        resolveFirstRunOffer();
     }
 
     /** Computed off the main thread; the LAN URLs come from the same status read. */

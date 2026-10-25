@@ -254,6 +254,29 @@
     <string name="connect_players_title">Reproductores compatibles</string>
     <string name="connect_players_body">TiviMate, StreamVault o cualquier reproductor IPTV que acepte una URL M3U.</string>
 
+    <!--
+        Asistente de primeros pasos (T8). Se ofrece desde una tarjeta de Inicio y solo mientras HaP
+        no tenga ninguna lista M3U y el usuario no lo haya cerrado; nunca es una sección de la
+        barra lateral y nunca se abre solo. Imperativos cortos y sin jerga: en esta pantalla no se
+        nombra AceServe, ni el proxy, ni HLS, ni ningún infohash. Mantener en sincronía con
+        values/strings.xml (AGENTS.md).
+    -->
+    <string name="first_run_card_title">Configura HaP en 3 pasos</string>
+    <string name="first_run_card_subtitle">Activa el servidor, añade tu lista y conecta tu reproductor</string>
+    <string name="first_run_title">Configura HaP</string>
+    <string name="first_run_intro">Tres pasos cortos. Puedes saltarte cualquiera: HaP sigue funcionando.</string>
+    <string name="first_run_step2_title">2. Usa o añade tu lista</string>
+    <string name="first_run_step2_body">Pega la dirección de una lista que ya tengas, o elige una de las que guardaste antes.</string>
+    <string name="first_run_saved_heading">Listas que ya tienes</string>
+    <string name="first_run_url_hint">Pega la dirección de tu lista</string>
+    <string name="first_run_step3_title">3. Conecta tu reproductor</string>
+    <string name="first_run_finish">Terminar</string>
+    <string name="first_run_dismiss">Ahora no</string>
+    <string name="first_run_saving">Comprobando tu lista…</string>
+    <string name="first_run_source_active">Lista activa: %1$s</string>
+    <string name="first_run_error_generic">No se pudo guardar la lista.</string>
+    <string name="first_run_error_next">Revisa el nombre y la dirección, y vuelve a intentarlo.</string>
+
     <!-- Actualizaciones (GitHub Releases). Mantener en sincronía con values/strings.xml. -->
     <string name="section_updates">Actualizaciones</string>
     <string name="update_installed_format">Instalada v%1$s (versionCode %2$d) - %3$s</string>

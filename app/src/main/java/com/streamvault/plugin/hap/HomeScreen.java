@@ -20,6 +20,10 @@ import android.widget.TextView;
  * <p>Every word that describes the runtime comes from {@link HapServiceStates}: nothing here is
  * hardcoded, and the four server states are plain-language sentences that say what happened and
  * what to do next (S3, S5).
+ *
+ * <p>One card is conditional: the first-run assistant (T8). It is created with the rest of the
+ * screen and only shown or hidden, so the approved order above is exactly what the screen shows
+ * once the assistant is no longer needed.
  */
 public final class HomeScreen {
 
@@ -33,10 +37,23 @@ public final class HomeScreen {
 
         /** The "Comprobar canales" shortcut. */
         void onOpenChannels();
+
+        /**
+         * The first-run card: the assistant that turns the server on, adds a list and connects a
+         * player, offered only while HaP has nothing to serve and the user has not closed it.
+         */
+        void onOpenFirstRun();
     }
 
     private final Activity activity;
     private final ScrollView root;
+
+    /**
+     * The first-run card. Created once and hidden, so offering it and taking the offer away is a
+     * visibility change: when it is hidden it is not a focus cell either, and the approved home
+     * order (S3) is exactly what the screen shows.
+     */
+    private final LinearLayout firstRunCard;
 
     private final TextView serverHeadingView;
     private final TextView serverReadyView;
@@ -102,6 +119,18 @@ public final class HomeScreen {
         statusCardBody.setPadding(0, space(R.dimen.hap_gap_block), 0, 0);
         statusCard.addView(statusCardBody, matchWrap());
         content.addView(statusCard, top(matchWrap(), R.dimen.hap_gap_block));
+
+        // The first-run card sits immediately under the status card and only while it is needed:
+        // nothing is configured yet, so the most useful next action is the assistant, and it is one
+        // focusable card the user can ignore (T8).
+        firstRunCard = card(true, R.drawable.bg_panel);
+        firstRunCard.setContentDescription(
+                description(R.string.first_run_card_title, R.string.first_run_card_subtitle));
+        firstRunCard.setOnClickListener(v -> listener.onOpenFirstRun());
+        addCardText(
+                firstRunCard, R.string.first_run_card_title, R.string.first_run_card_subtitle);
+        firstRunCard.setVisibility(View.GONE);
+        content.addView(firstRunCard, top(matchWrap(), R.dimen.hap_gap_block));
 
         // 2. The one dominant action: the largest, brightest element of the screen.
         LinearLayout cta = new LinearLayout(activity);
@@ -208,6 +237,16 @@ public final class HomeScreen {
             appliedIpfs = states.ipfs;
             bindStateWord(ipfsStateView, states.ipfs);
         }
+    }
+
+    /**
+     * Offers or withdraws the first-run card. Called with the answer of {@link FirstRunDecision},
+     * computed off the main thread, and writing nothing when the answer did not change: an
+     * unchanged tick touches no view, so it can never move the focus that is on the card (T8).
+     */
+    void applyFirstRunOffer(boolean offered) {
+        int target = offered ? View.VISIBLE : View.GONE;
+        if (firstRunCard.getVisibility() != target) firstRunCard.setVisibility(target);
     }
 
     private void bindStateWord(TextView view, HapServiceStates.ServiceState state) {

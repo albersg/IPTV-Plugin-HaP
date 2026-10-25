@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    First-run assistant (T8): three short steps on one scrollable screen.
+
+    It is its own activity, reached from one card on Inicio and never a permanent rail section, so
+    the five-section shell and its tests stay untouched. One screen instead of three is the
+    readable choice at three metres: each step is a card with its own action, and skipping a step is
+    simply not pressing its action.
+
+    Every control is a focusable leaf, so the column can be walked with UP/DOWN only (FirstRunFocus,
+    which reuses FocusGrid). Focus is drawn by the shared bg_cta / bg_panel state lists, so nothing
+    here invents a colour, a text size or an animation. Only the words that come from the live
+    runtime are left empty; FirstRunActivity fills the server state and never rebuilds this tree.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/first_run_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/hap_screen_padding_horizontal"
+    android:paddingTop="@dimen/hap_screen_padding_vertical"
+    android:paddingEnd="@dimen/hap_screen_padding_horizontal"
+    android:paddingBottom="@dimen/hap_screen_padding_vertical">
+
+    <ScrollView
+        android:id="@+id/first_run_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:focusable="false"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/first_run_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/first_run_title"
+                android:textAppearance="@style/TextAppearance.HaP.Display" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/hap_gap_row"
+                android:text="@string/first_run_intro"
+                android:textAppearance="@style/TextAppearance.HaP.Body"
+                android:textColor="@color/hap_text_muted" />
+
+            <!-- Step 1: turn the server on, with the real state and the one existing start path. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/hap_gap_block"
+                android:background="@drawable/bg_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/hap_card_padding">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/connect_step1_title"
+                    android:textAppearance="@style/TextAppearance.HaP.Subtitle" />
+
+                <TextView
+                    android:id="@+id/first_run_server_state"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:textAppearance="@style/TextAppearance.HaP.Body" />
+
+                <TextView
+                    android:id="@+id/first_run_server_body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:textAppearance="@style/TextAppearance.HaP.Body"
+                    android:textColor="@color/hap_text_muted" />
+
+                <TextView
+                    android:id="@+id/first_run_server_action"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_block"
+                    android:background="@drawable/bg_cta"
+                    android:clickable="true"
+                    android:defaultFocusHighlightEnabled="false"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:minHeight="@dimen/hap_nav_item_height"
+                    android:paddingStart="@dimen/hap_card_padding"
+                    android:paddingTop="@dimen/hap_gap_row"
+                    android:paddingEnd="@dimen/hap_card_padding"
+                    android:paddingBottom="@dimen/hap_gap_row"
+                    android:text="@string/connect_step1_action"
+                    android:textAppearance="@style/TextAppearance.HaP.Subtitle"
+                    android:textColor="@color/hap_text_on_accent"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Step 2: a list the user already has, or a new M3U URL validated by the same flow. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/hap_gap_block"
+                android:background="@drawable/bg_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/hap_card_padding">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/first_run_step2_title"
+                    android:textAppearance="@style/TextAppearance.HaP.Subtitle" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/first_run_step2_body"
+                    android:textAppearance="@style/TextAppearance.HaP.Body"
+                    android:textColor="@color/hap_text_muted" />
+
+                <TextView
+                    android:id="@+id/first_run_saved_heading"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_block"
+                    android:text="@string/first_run_saved_heading"
+                    android:textAppearance="@style/TextAppearance.HaP.Caption"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/first_run_saved_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <EditText
+                    android:id="@+id/first_run_source_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_block"
+                    android:background="@drawable/bg_panel"
+                    android:hint="@string/label_source_name"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:paddingStart="@dimen/hap_nav_item_padding"
+                    android:paddingTop="@dimen/hap_gap_row"
+                    android:paddingEnd="@dimen/hap_nav_item_padding"
+                    android:paddingBottom="@dimen/hap_gap_row"
+                    android:singleLine="true"
+                    android:textAppearance="@style/TextAppearance.HaP.Body"
+                    android:textColor="@color/hap_text_primary"
+                    android:textColorHint="@color/hap_text_muted" />
+
+                <EditText
+                    android:id="@+id/first_run_source_url"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:background="@drawable/bg_panel"
+                    android:hint="@string/first_run_url_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="textUri"
+                    android:paddingStart="@dimen/hap_nav_item_padding"
+                    android:paddingTop="@dimen/hap_gap_row"
+                    android:paddingEnd="@dimen/hap_nav_item_padding"
+                    android:paddingBottom="@dimen/hap_gap_row"
+                    android:singleLine="true"
+                    android:textAppearance="@style/TextAppearance.HaP.Body"
+                    android:textColor="@color/hap_text_primary"
+                    android:textColorHint="@color/hap_text_muted" />
+
+                <TextView
+                    android:id="@+id/first_run_source_save"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:background="@drawable/bg_panel"
+                    android:clickable="true"
+                    android:defaultFocusHighlightEnabled="false"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:minHeight="@dimen/hap_nav_item_height"
+                    android:paddingStart="@dimen/hap_card_padding"
+                    android:paddingEnd="@dimen/hap_card_padding"
+                    android:text="@string/button_add_m3u_source"
+                    android:textAppearance="@style/TextAppearance.HaP.Body" />
+
+                <TextView
+                    android:id="@+id/first_run_source_feedback"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:textAppearance="@style/TextAppearance.HaP.Body"
+                    android:textColor="@color/hap_text_muted"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Step 3: the player screen, not a copy of its addresses. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/hap_gap_block"
+                android:background="@drawable/bg_panel"
+                android:orientation="vertical"
+                android:padding="@dimen/hap_card_padding">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/first_run_step3_title"
+                    android:textAppearance="@style/TextAppearance.HaP.Subtitle" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_row"
+                    android:text="@string/connect_intro"
+                    android:textAppearance="@style/TextAppearance.HaP.Body"
+                    android:textColor="@color/hap_text_muted" />
+
+                <LinearLayout
+                    android:id="@+id/first_run_player"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/hap_gap_block"
+                    android:background="@drawable/bg_panel"
+                    android:clickable="true"
+                    android:defaultFocusHighlightEnabled="false"
+                    android:focusable="true"
+                    android:orientation="vertical"
+                    android:paddingStart="@dimen/hap_card_padding"
+                    android:paddingTop="@dimen/hap_gap_row"
+                    android:paddingEnd="@dimen/hap_card_padding"
+                    android:paddingBottom="@dimen/hap_gap_row">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/home_cta_title"
+                        android:textAppearance="@style/TextAppearance.HaP.Subtitle" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/hap_gap_row"
+                        android:text="@string/home_cta_subtitle"
+                        android:textAppearance="@style/TextAppearance.HaP.Body"
+                        android:textColor="@color/hap_text_muted" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/hap_hairline"
+        android:layout_marginTop="@dimen/hap_gap_block"
+        android:background="@color/hap_hairline" />
+
+    <!--
+        Two ways out, both always on screen and stacked so every control of this screen is one cell
+        of the same column: finishing records the decision, "not now" records the dismissal.
+        Neither is required to leave, because BACK finishes the activity from any step.
+    -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/hap_gap_row"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/first_run_finish"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_cta"
+            android:clickable="true"
+            android:defaultFocusHighlightEnabled="false"
+            android:focusable="true"
+            android:gravity="center"
+            android:minHeight="@dimen/hap_nav_item_height"
+            android:paddingStart="@dimen/hap_card_padding"
+            android:paddingEnd="@dimen/hap_card_padding"
+            android:text="@string/first_run_finish"
+            android:textAppearance="@style/TextAppearance.HaP.Subtitle"
+            android:textColor="@color/hap_text_on_accent" />
+
+        <TextView
+            android:id="@+id/first_run_dismiss"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/hap_gap_row"
+            android:background="@drawable/bg_panel"
+            android:clickable="true"
+            android:defaultFocusHighlightEnabled="false"
+            android:focusable="true"
+            android:gravity="center"
+            android:minHeight="@dimen/hap_nav_item_height"
+            android:paddingStart="@dimen/hap_card_padding"
+            android:paddingEnd="@dimen/hap_card_padding"
+            android:text="@string/first_run_dismiss"
+            android:textAppearance="@style/TextAppearance.HaP.Body" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/hap_gap_row"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/hint_select"
+            android:textAppearance="@style/TextAppearance.HaP.Caption" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/hap_gap_block"
+            android:text="@string/hint_back"
+            android:textAppearance="@style/TextAppearance.HaP.Caption" />
+    </LinearLayout>
+</LinearLayout>

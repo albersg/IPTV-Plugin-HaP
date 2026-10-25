@@ -254,6 +254,28 @@
     <string name="connect_players_title">Compatible players</string>
     <string name="connect_players_body">TiviMate, StreamVault or any IPTV player that accepts an M3U URL.</string>
 
+    <!--
+        First-run assistant (T8). It is offered from one card on Inicio and only while HaP has no
+        M3U list yet and the user has not closed it; it is never a rail section and never opens by
+        itself. Short imperatives, no jargon: no AceServe, proxy, HLS or infohash is named on this
+        screen. English and Spanish must stay in sync (AGENTS.md).
+    -->
+    <string name="first_run_card_title">Set up HaP in 3 steps</string>
+    <string name="first_run_card_subtitle">Turn on the server, add your list and connect your player</string>
+    <string name="first_run_title">Set up HaP</string>
+    <string name="first_run_intro">Three short steps. You can skip any of them: HaP keeps working.</string>
+    <string name="first_run_step2_title">2. Use or add your list</string>
+    <string name="first_run_step2_body">Paste the address of a list you already have, or choose one you saved before.</string>
+    <string name="first_run_saved_heading">Lists you already have</string>
+    <string name="first_run_url_hint">Paste your list address</string>
+    <string name="first_run_step3_title">3. Connect your player</string>
+    <string name="first_run_finish">Finish</string>
+    <string name="first_run_dismiss">Not now</string>
+    <string name="first_run_saving">Checking your list…</string>
+    <string name="first_run_source_active">List active: %1$s</string>
+    <string name="first_run_error_generic">The list could not be saved.</string>
+    <string name="first_run_error_next">Check the name and the address, then try again.</string>
+
     <!-- Updates (GitHub Releases). English and Spanish must stay in sync (AGENTS.md). -->
     <string name="section_updates">Updates</string>
     <string name="update_installed_format">Installed v%1$s (versionCode %2$d) - %3$s</string>

@@ -59,6 +59,17 @@
             android:label="@string/home_cta_title"
             android:theme="@style/AppTheme" />
 
+        <!--
+            The first-run assistant (T8). Its own activity, reached from one card on Inicio, so the
+            five-section shell and its tests stay untouched. Not exported: only HaP opens it, and it
+            is never a launcher entry, because it must appear only while HaP has nothing to serve.
+        -->
+        <activity
+            android:name=".FirstRunActivity"
+            android:exported="false"
+            android:label="@string/first_run_title"
+            android:theme="@style/AppTheme" />
+
         <service
             android:name=".StreamVaultHapPluginService"
             android:exported="true">
