@@ -66,6 +66,31 @@ prueba). Los pasos, de principio a fin:
 La lista se actualiza en el momento, sin caché de terceros, y ningún intermediario ve qué CID pides.
 Si en algún momento añades una versión nueva, el CID cambia: vuelve a añadir la fuente con el nuevo.
 
+### Meter la lista en el nodo de la propia caja
+
+El nodo embebido escucha la API de Kubo en `127.0.0.1:5001`, así que se le puede añadir contenido desde
+el PC sin instalar nada en la caja. Verificado con una lista de 388 canales, que volvió por el gateway
+byte a byte idéntica.
+
+```bash
+adb forward tcp:15001 tcp:5001
+adb forward tcp:18080 tcp:8080
+
+# alta, fijada para que no se recoja
+curl -F "file=@lista-unificada.m3u" "http://127.0.0.1:15001/api/v0/add?pin=true"
+# -> {"Hash":"Qm...","Size":"..."}
+
+# comprobar que el gateway la sirve
+curl -s "http://127.0.0.1:18080/ipfs/Qm..." | head -1   # #EXTM3U
+```
+
+Con el CID, la fuente es `http://127.0.0.1:8080/ipfs/<CID>`. Ventaja frente al fichero suelto: el CID es
+inmutable y verificable, y sirve para comprobar que lo que sirves es exactamente lo que publicaste. En
+contra: cada versión nueva de la lista es un CID nuevo, así que hay que volver a añadir la fuente.
+
+La API solo escucha en `127.0.0.1`, de modo que no queda expuesta a la red local: para llegar a ella hay
+que pasar por `adb`.
+
 ## Límite que no cambia con nada de esto
 
 IPFS solo afecta a **la lista**. Los canales dentro de ella siguen apuntando a los servidores del
