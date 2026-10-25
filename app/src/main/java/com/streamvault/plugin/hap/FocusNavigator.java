@@ -207,7 +207,10 @@ final class FocusNavigator {
             // window, so the press is consumed instead of being handed to a geometric search.
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return focusSection();
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return true;
-            return moveWithin(Graph.of(rail, FocusGrid.Edges.WRAPPED, true), focused, keyCode);
+            if (moveWithin(Graph.of(rail, FocusGrid.Edges.WRAPPED, true), focused, keyCode)) return true;
+            // Never hand a vertical press to the platform: its geometric search is what made a
+            // press vanish when the row model was being rebuilt against a live tree.
+            return isVertical(keyCode);
         }
 
         if (isInside(focused, content)) {
@@ -219,7 +222,11 @@ final class FocusNavigator {
             // LEFT from the first control of a row has nothing to its left inside the section, so
             // it returns to the rail entry of the section that is on screen.
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return focusRailItem(section);
-            return false;
+            // UP and DOWN are never delegated. On the device, an unplaced vertical press fell
+            // through to the platform's geometric search, which put focus on the rail and left the
+            // control the user was aiming at untouched. Consuming it keeps the D-pad inside the
+            // section; the dead-focus repair below still recovers if the target was unreachable.
+            return isVertical(keyCode);
         }
 
         // Focus is nowhere the shell owns it: the next press puts it back where the user was
@@ -238,6 +245,11 @@ final class FocusNavigator {
         if (!move.handled()) return false;
         if (move.index() == current || move.index() == FocusGrid.NO_INDEX) return true;
         return focusCell(graph, move.index());
+    }
+
+    /** True for the two directions that only ever move inside one column of one region. */
+    private static boolean isVertical(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN;
     }
 
     private static boolean isDirection(int keyCode) {
