@@ -58,6 +58,15 @@ target_include_directories(httpace_ts_probe_tests PRIVATE ${HTTPACE_CPP_DIR}/inc
 
 target_link_libraries(httpace_ts_probe_tests PRIVATE GTest::gtest_main)
 
+add_executable(httpace_recovery_policy_tests
+    test_recovery_policy.cpp
+    ${HTTPACE_CPP_DIR}/src/recovery_policy.cpp
+)
+
+target_include_directories(httpace_recovery_policy_tests PRIVATE ${HTTPACE_CPP_DIR}/include)
+
+target_link_libraries(httpace_recovery_policy_tests PRIVATE GTest::gtest_main)
+
 add_executable(httpace_local_source_tests
     test_local_source.cpp
     ${HTTPACE_CPP_DIR}/src/local_source.cpp
@@ -74,4 +83,5 @@ include(GoogleTest)
 gtest_discover_tests(httpace_util_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_chunk_parser_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_local_source_tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(httpace_recovery_policy_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_ts_probe_tests DISCOVERY_MODE PRE_TEST)

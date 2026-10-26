@@ -1,4 +1,6 @@
 #include "httpaceproxycpp/config.hpp"
+
+#include <algorithm>
 #include "httpaceproxycpp/proxy.hpp"
 #include "httpaceproxycpp/util.hpp"
 
@@ -46,7 +48,8 @@ Java_com_jopsis_httpaceserveproxy_HttpAceProxyNative_nativeStart(
     jstring user_m3u_sources,
     jstring custom_playlist_path,
     jint max_connections,
-    jint max_concurrent_channels) {
+    jint max_concurrent_channels,
+    jint stream_recovery_attempts) {
     try {
         {
             std::lock_guard<std::mutex> lock(g_mutex);
@@ -65,6 +68,7 @@ Java_com_jopsis_httpaceserveproxy_HttpAceProxyNative_nativeStart(
             config.custom_playlist_path = jstr(env, custom_playlist_path);
             config.max_connections = max_connections;
             config.max_concurrent_channels = max_concurrent_channels;
+            config.stream_recovery_attempts = std::clamp(static_cast<int>(stream_recovery_attempts), 0, 10);
             if (config.http_host == "0.0.0.0") {
                 config.firewall = true;
             }

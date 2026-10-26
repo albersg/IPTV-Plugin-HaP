@@ -3,6 +3,7 @@
 #include "httpaceproxycpp/ace_client.hpp"
 #include "httpaceproxycpp/config.hpp"
 #include "httpaceproxycpp/http_client.hpp"
+#include "httpaceproxycpp/recovery_policy.hpp"
 #include "httpaceproxycpp/ts_probe.hpp"
 
 #include <atomic>
@@ -83,9 +84,13 @@ public:
     std::string infohash() const { return infohash_; }
     // Transport counters of this upstream, safe to read while the reader thread feeds them.
     TsProbe::Counters transport() const;
+    // How many times this upstream was reopened after its reader ended while clients waited.
+    std::uint64_t recoveries() const { return recoveries_.load(std::memory_order_relaxed); }
 
 private:
     void stream_loop();
+    // Sleeps the backoff in small steps so a stop or the last client leaving is noticed promptly.
+    bool wait_before_retry(std::int64_t milliseconds);
     void stream_http_url(const std::string& url);
     void stream_hls_url(const std::string& url);
     void broadcast_chunk(const char* data, std::size_t size);
@@ -103,6 +108,7 @@ private:
     std::thread stream_thread_;
     mutable std::mutex probe_mutex_;
     TsProbe probe_;
+    std::atomic<std::uint64_t> recoveries_{0};
 };
 
 class BroadcastManager {
@@ -123,6 +129,7 @@ public:
         std::string channel;
         std::size_t clients = 0;
         std::uint64_t bytes_sent = 0;
+        std::uint64_t recoveries = 0;
         TsProbe::Counters counters;
     };
     std::vector<StreamTransport> stream_transports() const;

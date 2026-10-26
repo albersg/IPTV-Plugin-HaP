@@ -15,6 +15,10 @@ struct Config {
     int http_port = 8888;
     int max_connections = 10;
     int max_concurrent_channels = 5;
+    // Bounded retries of the same upstream after its reader ends while clients wait. 0 disables
+    // recovery completely, which is the shipped default until a comparative run exists
+    // (odd/tasks/hap-stream-recovery.md).
+    int stream_recovery_attempts = 0;
     // Concurrency bound for the HTTP server itself (0 = unlimited). Kept separate from
     // max_connections, which caps concurrent *streaming* clients, so short control
     // requests still fit while every stream slot is busy.

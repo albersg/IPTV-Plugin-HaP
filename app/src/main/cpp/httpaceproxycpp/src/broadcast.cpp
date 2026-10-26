@@ -141,20 +141,67 @@ TsProbe::Counters Broadcast::transport() const {
     return probe_.snapshot(steady_millis());
 }
 
+bool Broadcast::wait_before_retry(std::int64_t milliseconds) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (!running_.load() || client_count() == 0) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    return running_.load() && client_count() > 0;
+}
+
 void Broadcast::stream_loop() {
     {
         std::lock_guard<std::mutex> lock(probe_mutex_);
         probe_.reset();
     }
-    try {
-        auto started = ace_->start_broadcast(start_params_);
-        auto url = rewrite_url_host_port(url_decode(started.url), config_.ace_host, std::to_string(config_.ace_http_port));
-        // Security: the resolved stream URL can embed a token or credentials.
-        log_line("INFO", "[" + infohash_.substr(0, 8) + "] stream URL " + redact_url(url));
-        if (ends_with(parse_url(url).path, ".m3u8")) stream_hls_url(url);
-        else stream_http_url(url);
-    } catch (const std::exception& e) {
-        log_line("ERROR", "[" + infohash_.substr(0, 8) + "] stream failed: " + std::string(e.what()));
+    RecoveryPolicy recovery;
+    recovery.max_attempts = config_.stream_recovery_attempts;
+    int attempt = 0;
+    bool gave_up = false;
+    for (;;) {
+        try {
+            auto started = ace_->start_broadcast(start_params_);
+            auto url = rewrite_url_host_port(url_decode(started.url), config_.ace_host, std::to_string(config_.ace_http_port));
+            // Security: the resolved stream URL can embed a token or credentials.
+            log_line("INFO", "[" + infohash_.substr(0, 8) + "] stream URL " + redact_url(url));
+            if (ends_with(parse_url(url).path, ".m3u8")) stream_hls_url(url);
+            else stream_http_url(url);
+        } catch (const std::exception& e) {
+            log_line("ERROR", "[" + infohash_.substr(0, 8) + "] stream failed: " + std::string(e.what()));
+        }
+        // A reader that ended while the broadcast is still wanted and clients are still waiting is an
+        // unexpected end, whatever the transport said: nothing closed it on purpose.
+        const bool unexpected_end = running_.load() && client_count() > 0;
+        if (!unexpected_end) break;
+        const std::int64_t wait = retry_backoff_ms(recovery, attempt + 1);
+        if (wait <= 0) {
+            gave_up = true;
+            break;
+        }
+        attempt++;
+        recoveries_.fetch_add(1, std::memory_order_relaxed);
+        log_line("WARNING", "[" + infohash_.substr(0, 8) + "] upstream ended with "
+                + std::to_string(client_count()) + " client(s) waiting; retry "
+                + std::to_string(attempt) + "/" + std::to_string(recovery.max_attempts)
+                + " in " + std::to_string(wait) + " ms");
+        try { ace_->stop_broadcast(); } catch (...) {}
+        if (!wait_before_retry(wait)) break;
+        {
+            // A retry is a new session: its PIDs, continuity and PCR start over, so the counters of
+            // the previous one must not be mixed into it.
+            std::lock_guard<std::mutex> lock(probe_mutex_);
+            probe_.reset();
+        }
+        try {
+            ace_->authenticate();
+        } catch (const std::exception& e) {
+            log_line("WARNING", "[" + infohash_.substr(0, 8) + "] re-auth failed: " + std::string(e.what()));
+        }
+    }
+    if (gave_up && running_.load()) {
+        log_line("ERROR", "[" + infohash_.substr(0, 8) + "] giving up after "
+                + std::to_string(recovery.max_attempts) + " retries");
     }
     running_ = false;
     for (auto& client : clients()) client->queue->close();
@@ -362,6 +409,7 @@ std::vector<BroadcastManager::StreamTransport> BroadcastManager::stream_transpor
             if (entry.channel.empty()) entry.channel = client->channel_name;
             entry.bytes_sent += client->bytes_sent.load(std::memory_order_relaxed);
         }
+        entry.recoveries = broadcast->recoveries();
         entry.counters = broadcast->transport();
         out.push_back(std::move(entry));
     }
