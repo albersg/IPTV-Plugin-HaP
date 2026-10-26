@@ -767,6 +767,7 @@ public class HapConfigActivity extends Activity {
         // into the folder while the app runs was invisible until the app was restarted.
         if (section == HapSections.Section.FUENTES && deviceList != null) renderDeviceLists();
 
+
         if (section == HapSections.Section.EVENTOS && eventRefreshButton != null
                 && currentEvents.isEmpty() && eventRefreshButton.isEnabled()) {
             eventRefreshButton.performClick();
@@ -957,6 +958,8 @@ public class HapConfigActivity extends Activity {
 
         externalServerSwitch = new Switch(this);
         externalServerSwitch.setPadding(dp(10), 0, 0, 0);
+        // TalkBack reads the switch, not the TextView beside it, so it has to carry the label.
+        externalServerSwitch.setContentDescription(getString(R.string.label_external_player_server));
         externalServerSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
             if (suppressSwitchCallbacks) return;
             setExternalPlayerServer(checked);
@@ -998,6 +1001,7 @@ public class HapConfigActivity extends Activity {
 
         ipfsSwitch = new Switch(this);
         ipfsSwitch.setPadding(dp(10), 0, 0, 0);
+        ipfsSwitch.setContentDescription(getString(R.string.label_ipfs_enable));
         ipfsSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
             if (suppressSwitchCallbacks) return;
             setIpfsEnabled(checked);
@@ -1072,6 +1076,7 @@ public class HapConfigActivity extends Activity {
         externalRow.addView(text(getString(R.string.label_ipfs_external_mode), 13, COLOR_TEXT_PRIMARY, Typeface.BOLD),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         ipfsExternalSwitch = new Switch(this);
+        ipfsExternalSwitch.setContentDescription(getString(R.string.label_ipfs_external_mode));
         ipfsExternalSwitch.setOnCheckedChangeListener((buttonView, checked) ->
                 ipfsExternalFieldsContainer.setVisibility(checked ? View.VISIBLE : View.GONE));
         busyControls.add(ipfsExternalSwitch);
@@ -1151,6 +1156,7 @@ public class HapConfigActivity extends Activity {
         right.addView(text(getString(R.string.label_lan_server), 13, COLOR_TEXT_SECONDARY, Typeface.BOLD));
         lanSwitch = new Switch(this);
         lanSwitch.setPadding(dp(8), 0, 0, 0);
+        lanSwitch.setContentDescription(getString(R.string.label_lan_server));
         lanSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
             if (suppressSwitchCallbacks) return;
             setServerMode(checked);
@@ -2096,6 +2102,7 @@ public class HapConfigActivity extends Activity {
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         );
         updateAutomaticSwitch = new Switch(this);
+        updateAutomaticSwitch.setContentDescription(getString(R.string.update_label_automatic));
         updateAutomaticSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
             if (suppressUpdateCallbacks) return;
             UpdateSettings.setAutomaticCheckEnabled(this, checked);
@@ -2114,6 +2121,7 @@ public class HapConfigActivity extends Activity {
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         );
         updatePrereleaseSwitch = new Switch(this);
+        updatePrereleaseSwitch.setContentDescription(getString(R.string.update_label_prerelease));
         updatePrereleaseSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
             if (suppressUpdateCallbacks) return;
             UpdateSettings.setIncludePrereleases(this, checked);
