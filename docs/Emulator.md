@@ -106,3 +106,23 @@ verify anything behind the server.
 
 That failure was invisible until the debug control activity could print the in-app log
 (`am start ... --es op log`), because engine output is deliberately kept out of logcat.
+
+## Serving a fixture to the app from the host
+
+The clients and transport panel reads `/stat?action=get_clients`. On this emulator the proxy cannot
+run, so the app can be pointed at a fixture on the host instead of a real proxy:
+
+```bash
+# 1. A tiny HTTP server on the host answering that path with the real JSON shape.
+python3 tools/stat-fixture.py &          # listens on 127.0.0.1:8888
+
+# 2. Map the device's loopback port to the host's.
+adb reverse tcp:8888 tcp:8888
+
+# 3. Open HaP -> Connections -> Refresh clients.
+```
+
+The fixture returns the same `clients_data` and `streams` arrays the native proxy builds, including
+all three transport wordings (fresh, unsynchronised, stalled). It is evidence for the app side only:
+it proves the JSON contract, the parsing and the painting, never the proxy. A real stream is still a
+device check.

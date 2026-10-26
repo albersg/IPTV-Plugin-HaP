@@ -12,22 +12,24 @@ baseline wins.
 source is configured on the box, so the streaming path has not been exercised since the shell was
 rewritten. This is the most important open verification, and it is also V2/V3's prerequisite.
 
-**V2 — Transport health on screen.** The new `Conexiones` block reads `streams` from the same
-`/stat?action=get_clients` answer the client list uses. Parsing is pinned by `TransportStatusTest`;
-what has never been seen is one line per upstream on the TV while something plays, including the
-stalled wording. Closes with a screenshot of a live stream and one of a stopped upstream.
+**V2 — Transport health on screen.** The app half is verified on the emulator through a host fixture
+over `adb reverse` (`tools/stat-fixture.py`): three upstreams rendered as `data 0 s ago`, `no MPEG-TS
+recognised` and `no data for 120 s`, and the block now sits above the Refresh button because below
+the client rows it fell past the last focusable control. Still owed: the same line on the box with a
+real stream, without the fixture.
 
 **V3 — BACK and focus memory, section by section.** BACK returning to Inicio is confirmed on the
 device. The per-section anchor was attempted and the test was inconclusive: activating a rail entry
 leaves focus on the rail by design, so the check has to move focus into the section first, then leave
 and come back. Both behaviours are covered by units; the round trip per section has not been walked.
 
-**V4 — D-pad and focus inside a section, on the box.** The reported defects (a press swallowed when
-keys arrive faster than ~1 Hz, DOWN from the Privacy switch escaping into the rail) were addressed in
-`b6196d2` and `02f6d09`: `FocusNavigator` consumes every vertical press it resolves, and the single
-hand-off is bounded by `ScrollHandoff` to a recycler row that has a row beyond it. Units pin the
-arithmetic; the box has not seen it since. Closes when four fast DOWN presses reach `Ajustes` and DOWN
-from the last privacy control stays in the section.
+**V4 — D-pad and focus inside a section.** Verified on the emulator (see
+`odd/tasks/hap-focus-visual-rows.md`): the rail reaches `Conexiones` in four presses at 0.2 s and at
+1.5 s spacing, scrolls the focused entry into view, BACK returns to `Inicio`, a DOWN at the last
+control of a section stays there, and RIGHT walks within a row. The earlier "swallowed press" was an
+artifact of sending one `adb shell` per event, not the app. A real defect was found and fixed on the
+way: rows followed the view tree, so DOWN from the second URL in `Conexiones` jumped up to the LAN
+switch. The box still owes the same walk, including the Ajustes panels.
 
 **V5 — RecyclerView rows at full length.** The list is installed and has not crashed, but Google
 TV's ambient screensaver took the screen during the check, so the list has never been looked at with
@@ -67,6 +69,7 @@ minute. One run of `tools/device-check.sh scenario` closes most of them.
 | — | Resolve the OkHttp/Okio thread mystery | 22 threads run while `dependencyInsight` finds no OkHttp and no marker appears in the dex, yet OkHttp-style threads were observed earlier. Resolve by sampling stack traces (`debuggerd -b <tid>` or Perfetto), not by guessing |
 | — | Visual review of `Canales`, `Fuentes`, `Ajustes` | Only `Inicio` and `Conexiones` have been reviewed visually; the `Fuentes` empty state is two buttons and a lot of nothing |
 | — | Confirm the folded panels in `Ajustes` | `c74a73a` changed the collapsed padding and was verified for `Canales`; the other folded panels were not walked after it |
+| — | D-pad row order outside `Conexiones` | The fix is global (`FocusRows`), verified on `Conexiones`, `Inicio` and the rail; no other section had a two-column composition to exercise it, so a walk of `Fuentes` and `Ajustes` on the box is still owed |
 | — | Branch hygiene | The branch carries roughly 14,000 authored lines across 38 commits and long passed the ~400-line review slice. History will not be rewritten this late; a proper review needs chained PRs by area |
 
 ## 4. Next engineering step
