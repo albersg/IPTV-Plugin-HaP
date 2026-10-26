@@ -1,5 +1,6 @@
 #include "httpaceproxycpp/recovery_policy.hpp"
 
+#include <algorithm>
 #include <limits>
 
 namespace httpace {
@@ -39,6 +40,13 @@ std::int64_t retry_backoff_ms(const RecoveryPolicy& policy, int attempt) {
                     ? std::numeric_limits<std::int64_t>::max()
                     : backoff + jitter;
     return capped(total, policy.max_backoff_ms);
+}
+
+int upstream_read_timeout_seconds(const RecoveryPolicy& policy, int configured_seconds) {
+    if (policy.max_attempts <= 0) return configured_seconds;
+    // 0 is the documented "no timeout"; lowering it would change a different setting's meaning.
+    if (configured_seconds <= 0) return configured_seconds;
+    return std::min(configured_seconds, kRecoverySilentTimeoutSeconds);
 }
 
 } // namespace httpace

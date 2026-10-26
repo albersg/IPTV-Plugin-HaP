@@ -199,7 +199,9 @@ void Broadcast::stream_loop() {
             log_line("WARNING", "[" + infohash_.substr(0, 8) + "] re-auth failed: " + std::string(e.what()));
         }
     }
-    if (gave_up && running_.load()) {
+    // With recovery disabled there is nothing to give up: the session ended and that is the whole
+    // story. Logging "giving up after 0 retries" there would blame a policy that was never asked.
+    if (gave_up && running_.load() && recovery.max_attempts > 0) {
         log_line("ERROR", "[" + infohash_.substr(0, 8) + "] giving up after "
                 + std::to_string(recovery.max_attempts) + " retries");
     }
@@ -208,6 +210,9 @@ void Broadcast::stream_loop() {
 }
 
 void Broadcast::stream_http_url(const std::string& url) {
+    RecoveryPolicy recovery;
+    recovery.max_attempts = config_.stream_recovery_attempts;
+    const int read_timeout = upstream_read_timeout_seconds(recovery, config_.video_timeout);
     http_client_.stream(url, [&](const char* data, std::size_t size) {
         broadcast_chunk(data, size);
         if (!running_ || client_count() == 0) {
@@ -215,7 +220,7 @@ void Broadcast::stream_http_url(const std::string& url) {
             return false;
         }
         return true;
-    }, running_, 5, config_.video_timeout, std::max(1, config_.curl_stream_buffer));
+    }, running_, 5, read_timeout, std::max(1, config_.curl_stream_buffer));
 }
 
 void Broadcast::stream_hls_url(const std::string& url) {

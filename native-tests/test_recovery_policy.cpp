@@ -66,3 +66,27 @@ TEST(RecoveryPolicy, HugeAttemptsDoNotOverflow) {
 TEST(RecoveryPolicy, AZeroBaseStillWaitsNothing) {
     EXPECT_EQ(httpace::retry_backoff_ms(policy(3, 0, 8000), 1), 0);
 }
+
+TEST(RecoveryReadTimeout, disabledKeepsTheConfiguredTimeout) {
+    httpace::RecoveryPolicy policy;
+    policy.max_attempts = 0;
+    EXPECT_EQ(upstream_read_timeout_seconds(policy, 30), 30);
+}
+
+TEST(RecoveryReadTimeout, enabledEndsASilentSessionBeforeTheConfiguredTimeout) {
+    httpace::RecoveryPolicy policy;
+    policy.max_attempts = 3;
+    EXPECT_EQ(upstream_read_timeout_seconds(policy, 30), 15);
+}
+
+TEST(RecoveryReadTimeout, neverRaisesATimeoutThatIsAlreadyShorter) {
+    httpace::RecoveryPolicy policy;
+    policy.max_attempts = 3;
+    EXPECT_EQ(upstream_read_timeout_seconds(policy, 8), 8);
+}
+
+TEST(RecoveryReadTimeout, zeroKeepsItsNoTimeoutMeaning) {
+    httpace::RecoveryPolicy policy;
+    policy.max_attempts = 3;
+    EXPECT_EQ(upstream_read_timeout_seconds(policy, 0), 0);
+}

@@ -32,4 +32,18 @@ struct RecoveryPolicy {
  */
 std::int64_t retry_backoff_ms(const RecoveryPolicy& policy, int attempt);
 
+/**
+ * Read timeout for an upstream session, in seconds.
+ *
+ * <p>Measured on the box (odd/tasks/hap-stream-recovery.md): a healthy cold channel sends its first
+ * byte in about 1.4 s, but a channel the engine accepts and never feeds stays silent for the whole
+ * configured timeout - 30 s by default. With recovery enabled a silent session ends at
+ * {@code kRecoverySilentTimeoutSeconds} so the retry, which may succeed, is not delayed by a session
+ * that is producing nothing. The configured value is never raised, and 0 keeps its "no timeout"
+ * meaning.
+ */
+constexpr int kRecoverySilentTimeoutSeconds = 15;
+
+int upstream_read_timeout_seconds(const RecoveryPolicy& policy, int configured_seconds);
+
 } // namespace httpace
