@@ -43,15 +43,17 @@ behind. `tools/device-check.sh leak-check` measures the last part.
 download, low free space, a corrupted APK, and GitHub rate limiting. The happy path was validated
 end to end for `v1.4.1`.
 
-**V8 — First-run assistant exercised.** It shows because nothing is configured; its steps have not
-been walked: saving a list, reaching step 3, finishing, and confirming it never returns. Also confirm
-BACK leaves without recording a decision.
+**V8 — First-run assistant exercised.** The card ("Set up HaP in 3 steps") was seen on the emulator
+after `pm clear`, below the primary action, and is reachable with the D-pad. Its steps have not been
+walked: saving a list, reaching step 3, finishing, and confirming it never returns. Also confirm BACK
+leaves without recording a decision.
 
 **V9 — The how-to-watch screen's details.** What OK does on the selectable address, the horizontal
 scroll of a long LAN URL, and legibility at three metres.
 
-**V10 — Overscan and TalkBack.** No section has been checked at 720p, and no content description has
-been heard through a screen reader.
+**V10 — Overscan and TalkBack.** At 1280x720 / 213dpi the emulator renders the same 960x540dp
+layout with no edge clipping (the section scrolls under the footer as designed). No content
+description has been heard through a screen reader.
 
 ## 2. Measurements still missing
 
