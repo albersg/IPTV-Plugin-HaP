@@ -1,0 +1,164 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "app/src/main/jniLibs/arm64-v8a/libacepython.so",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7a5e392c42664151b6b2d65b14b4de49145ca736269c4082cf1d8983edce49b9"
+        }
+      ],
+      "name": "libacepython.so",
+      "properties": [
+        {
+          "name": "hap:path",
+          "value": "app/src/main/jniLibs/arm64-v8a/libacepython.so"
+        },
+        {
+          "name": "hap:architecture",
+          "value": "arm64-v8a"
+        },
+        {
+          "name": "hap:size",
+          "value": "5920"
+        },
+        {
+          "name": "hap:note",
+          "value": "launcher for the device-provided AceStream Python engine"
+        }
+      ],
+      "type": "library",
+      "version": "unversioned"
+    },
+    {
+      "bom-ref": "app/src/main/jniLibs/arm64-v8a/libipfs.so",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "30c5a87c241cd7452e8dd8f62b8d9cfebce3f45d011a71ad517148c1d8eae559"
+        }
+      ],
+      "name": "libipfs.so",
+      "properties": [
+        {
+          "name": "hap:path",
+          "value": "app/src/main/jniLibs/arm64-v8a/libipfs.so"
+        },
+        {
+          "name": "hap:architecture",
+          "value": "arm64-v8a"
+        },
+        {
+          "name": "hap:size",
+          "value": "64422182"
+        },
+        {
+          "name": "hap:note",
+          "value": "kubo (Go, built as a shared-library-named executable)"
+        }
+      ],
+      "type": "application",
+      "version": "unversioned"
+    },
+    {
+      "bom-ref": "app/src/main/jniLibs/armeabi-v7a/libacepython.so",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e9764093ef8c1163204984dc5bca7d0cef46709ac436e84b0b565e04de95b5bb"
+        }
+      ],
+      "name": "libacepython.so",
+      "properties": [
+        {
+          "name": "hap:path",
+          "value": "app/src/main/jniLibs/armeabi-v7a/libacepython.so"
+        },
+        {
+          "name": "hap:architecture",
+          "value": "armeabi-v7a"
+        },
+        {
+          "name": "hap:size",
+          "value": "5632"
+        },
+        {
+          "name": "hap:note",
+          "value": "launcher for the device-provided AceStream Python engine"
+        }
+      ],
+      "type": "library",
+      "version": "unversioned"
+    },
+    {
+      "bom-ref": "app/src/main/jniLibs/armeabi-v7a/libipfs.so",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "45214065fbcaa1c1cfc0b5eda6a6b5ec4dad0876ff7c3c0557e42e26b76f7830"
+        }
+      ],
+      "name": "libipfs.so",
+      "properties": [
+        {
+          "name": "hap:path",
+          "value": "app/src/main/jniLibs/armeabi-v7a/libipfs.so"
+        },
+        {
+          "name": "hap:architecture",
+          "value": "armeabi-v7a"
+        },
+        {
+          "name": "hap:size",
+          "value": "62419624"
+        },
+        {
+          "name": "hap:note",
+          "value": "kubo (Go, built as a shared-library-named executable)"
+        }
+      ],
+      "type": "application",
+      "version": "unversioned"
+    },
+    {
+      "bom-ref": "app/src/main/assets/aceserve/main_android.py",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "413ca29c3ed62bd2717ba174ae2cf744f34f98843be8d920c11ce786176ab7a5"
+        }
+      ],
+      "name": "main_android.py",
+      "properties": [
+        {
+          "name": "hap:path",
+          "value": "app/src/main/assets/aceserve/main_android.py"
+        },
+        {
+          "name": "hap:architecture",
+          "value": "any"
+        },
+        {
+          "name": "hap:size",
+          "value": "17263"
+        },
+        {
+          "name": "hap:note",
+          "value": "AceStream engine script, run by the device interpreter"
+        }
+      ],
+      "type": "data",
+      "version": "unversioned"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "name": "hap",
+      "type": "application",
+      "version": "1.4.1"
+    }
+  },
+  "specVersion": "1.5",
+  "version": 1
+}
