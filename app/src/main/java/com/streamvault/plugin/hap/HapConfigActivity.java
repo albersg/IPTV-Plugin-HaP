@@ -190,6 +190,7 @@ public class HapConfigActivity extends Activity {
     private TextView customHintView;
     private LinearLayout clientsContainer;
     private TextView clientsStatusView;
+    private TextView transportView;
     private LinearLayout pluginTabsContainer;
     private TextView channelsHintView;
     private TextView channelFeedbackView;
@@ -1321,6 +1322,13 @@ public class HapConfigActivity extends Activity {
         clientsStatusView = text(getString(R.string.message_no_active_clients), 13, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
         clientsStatusView.setPadding(dp(10), 0, 0, 0);
         controls.addView(clientsStatusView, wrapWrap());
+
+        // One compact block under the client rows: what the transport of each upstream is doing.
+        // It stays a single TextView so a 1 Hz refresh cannot rebuild anything.
+        transportView = text("", 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
+        transportView.setPadding(0, dp(10), 0, 0);
+        transportView.setVisibility(View.GONE);
+        panel.body.addView(transportView, matchWrap());
 
         clientsContainer = new LinearLayout(this);
         clientsContainer.setOrientation(LinearLayout.VERTICAL);
@@ -3215,6 +3223,44 @@ public class HapConfigActivity extends Activity {
     }
 
     /** Applies the connected client rows in place; the status line only changes when it differs. */
+    /**
+     * Paints one line per active upstream: channel, arrival rate, continuity errors and how old the
+     * last payload byte is. These are transport counters, not a claim about the picture on screen
+     * (S4 of odd/tasks/hap-transport-health.md); a stream with silent transport says so here instead
+     * of looking healthy because the client rows still exist.
+     */
+    private void renderTransports(List<HapBridge.TransportInfo> transports) {
+        if (transportView == null) return;
+        if (transports == null || transports.isEmpty()) {
+            transportView.setVisibility(View.GONE);
+            return;
+        }
+        StringBuilder lines = new StringBuilder();
+        for (HapBridge.TransportInfo transport : transports) {
+            if (lines.length() > 0) lines.append('\n');
+            String channel = transport.channel == null || transport.channel.isEmpty()
+                    ? getString(R.string.transport_unnamed)
+                    : transport.channel;
+            long seconds = Math.max(0, transport.lastPayloadAgeMs) / 1000;
+            String freshness;
+            if (!transport.synced) {
+                freshness = getString(R.string.transport_unsynchronized);
+            } else if (transport.stalled) {
+                freshness = getString(R.string.transport_stalled, seconds);
+            } else {
+                freshness = getString(R.string.transport_fresh, seconds);
+            }
+            lines.append(getString(
+                    R.string.transport_line,
+                    channel,
+                    transport.megabitsPerSecond,
+                    transport.continuityErrors,
+                    freshness));
+        }
+        applyText(transportView, lines.toString());
+        transportView.setVisibility(View.VISIBLE);
+    }
+
     private void renderClients(List<HapBridge.ConnectedClientInfo> clients) {
         applyText(clientsStatusView, clients.isEmpty()
                 ? getString(R.string.message_no_active_clients)
@@ -3876,8 +3922,11 @@ public class HapConfigActivity extends Activity {
         applyText(clientsStatusView, getString(R.string.message_loading_clients));
         workExecutor.execute(() -> {
             try {
-                List<HapBridge.ConnectedClientInfo> clients = HapBridge.connectedClients();
-                main(() -> renderClients(clients));
+                HapBridge.ClientsSnapshot snapshot = HapBridge.clientsSnapshot();
+                main(() -> {
+                    renderClients(snapshot.clients);
+                    renderTransports(snapshot.transports);
+                });
             } catch (Throwable error) {
                 main(() -> {
                     applyText(clientsStatusView, errorMessage(error));

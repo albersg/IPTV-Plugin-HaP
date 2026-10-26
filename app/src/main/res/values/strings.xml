@@ -394,4 +394,9 @@
     <string name="events_channels_for">Channels showing this: %1$s</string>
     <string name="events_network_error">No connection to the guide and nothing saved yet: %1$s</string>
     <string name="events_back">Back to events</string>
+    <string name="transport_line">%1$s · %2$.1f Mb/s · %3$d continuity errors · %4$s</string>
+    <string name="transport_fresh">data %1$d s ago</string>
+    <string name="transport_stalled">no data for %1$d s</string>
+    <string name="transport_unsynchronized">no MPEG-TS recognised</string>
+    <string name="transport_unnamed">Unnamed channel</string>
 </resources>

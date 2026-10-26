@@ -396,4 +396,9 @@
     <string name="events_channels_for">Canales que lo emiten: %1$s</string>
     <string name="events_network_error">Sin conexión con la guía y nada guardado todavía: %1$s</string>
     <string name="events_back">Volver a eventos</string>
+    <string name="transport_line">%1$s · %2$.1f Mb/s · %3$d errores de continuidad · %4$s</string>
+    <string name="transport_fresh">datos hace %1$d s</string>
+    <string name="transport_stalled">sin datos desde hace %1$d s</string>
+    <string name="transport_unsynchronized">sin MPEG-TS reconocible</string>
+    <string name="transport_unnamed">Canal sin nombre</string>
 </resources>

@@ -387,11 +387,29 @@ public final class HapBridge {
     }
 
     public static List<ConnectedClientInfo> connectedClients() throws Exception {
-        List<ConnectedClientInfo> out = new ArrayList<>();
-        for (ConnectedClientsClient.Client client : ConnectedClientsClient.load()) {
-            out.add(new ConnectedClientInfo(client.ip, client.device, client.channel, client.megabytes));
+        return clientsSnapshot().clients;
+    }
+
+    /** One request for both the client rows and the transport of every active upstream. */
+    public static ClientsSnapshot clientsSnapshot() throws Exception {
+        ConnectedClientsClient.Snapshot snapshot = ConnectedClientsClient.load();
+        List<ConnectedClientInfo> clients = new ArrayList<>(snapshot.clients.size());
+        for (ConnectedClientsClient.Client client : snapshot.clients) {
+            clients.add(new ConnectedClientInfo(client.ip, client.device, client.channel, client.megabytes));
         }
-        return out;
+        List<TransportInfo> transports = new ArrayList<>(snapshot.transports.size());
+        for (ConnectedClientsClient.Transport transport : snapshot.transports) {
+            transports.add(new TransportInfo(
+                    transport.channel,
+                    transport.clients,
+                    transport.megabitsPerSecond(),
+                    transport.continuityErrors,
+                    transport.syncErrors,
+                    transport.lastPayloadAgeMs,
+                    transport.stalled,
+                    transport.synced));
+        }
+        return new ClientsSnapshot(clients, transports);
     }
 
     public static List<PluginChannelsInfo> channelPlugins(Context context) throws Exception {
@@ -444,7 +462,7 @@ public final class HapBridge {
      * polling it in a tight loop.
      */
     public static int connectedClientCount() throws Exception {
-        return ConnectedClientsClient.load().size();
+        return ConnectedClientsClient.load().clients.size();
     }
 
     /**
@@ -585,6 +603,41 @@ public final class HapBridge {
             this.index = index;
             this.name = name;
             this.contentId = contentId;
+        }
+    }
+
+    /** What one proxy answer says about clients and transport, measured at the same instant. */
+    public static final class ClientsSnapshot {
+        public final List<ConnectedClientInfo> clients;
+        public final List<TransportInfo> transports;
+
+        ClientsSnapshot(List<ConnectedClientInfo> clients, List<TransportInfo> transports) {
+            this.clients = clients;
+            this.transports = transports;
+        }
+    }
+
+    /** Transport health of one upstream; see {@code ConnectedClientsClient.Transport}. */
+    public static final class TransportInfo {
+        public final String channel;
+        public final int clients;
+        public final double megabitsPerSecond;
+        public final long continuityErrors;
+        public final long syncErrors;
+        public final long lastPayloadAgeMs;
+        public final boolean stalled;
+        public final boolean synced;
+
+        TransportInfo(String channel, int clients, double megabitsPerSecond, long continuityErrors,
+                      long syncErrors, long lastPayloadAgeMs, boolean stalled, boolean synced) {
+            this.channel = channel;
+            this.clients = clients;
+            this.megabitsPerSecond = megabitsPerSecond;
+            this.continuityErrors = continuityErrors;
+            this.syncErrors = syncErrors;
+            this.lastPayloadAgeMs = lastPayloadAgeMs;
+            this.stalled = stalled;
+            this.synced = synced;
         }
     }
 
