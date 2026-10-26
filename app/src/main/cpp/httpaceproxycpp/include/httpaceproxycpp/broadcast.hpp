@@ -3,6 +3,7 @@
 #include "httpaceproxycpp/ace_client.hpp"
 #include "httpaceproxycpp/config.hpp"
 #include "httpaceproxycpp/http_client.hpp"
+#include "httpaceproxycpp/ts_probe.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -80,6 +81,8 @@ public:
     void stop();
     std::shared_ptr<AceClient> ace() const { return ace_; }
     std::string infohash() const { return infohash_; }
+    // Transport counters of this upstream, safe to read while the reader thread feeds them.
+    TsProbe::Counters transport() const;
 
 private:
     void stream_loop();
@@ -98,6 +101,8 @@ private:
     std::atomic<bool> started_{false};
     std::atomic<bool> stopped_{false};
     std::thread stream_thread_;
+    mutable std::mutex probe_mutex_;
+    TsProbe probe_;
 };
 
 class BroadcastManager {
@@ -112,6 +117,16 @@ public:
     std::size_t broadcast_count() const;
     std::size_t client_count() const;
     std::vector<std::shared_ptr<StreamClient>> all_clients() const;
+
+    // One entry per live upstream, without an infohash or any request URL (S5).
+    struct StreamTransport {
+        std::string channel;
+        std::size_t clients = 0;
+        std::uint64_t bytes_sent = 0;
+        TsProbe::Counters counters;
+    };
+    std::vector<StreamTransport> stream_transports() const;
+
     void stop_all();
 
 private:

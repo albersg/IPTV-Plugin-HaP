@@ -33,6 +33,9 @@ public:
 
     Json clients_json();
     Json status_json();
+    // Per-upstream transport counters, shared by /status and /stat?action=get_clients so the app
+    // needs a single request to paint clients and transport together.
+    Json streams_json();
     Json plugins_json();
     Json check_channel_light(const std::string& plugin, const std::string& channel, const std::string& content_id);
     Json check_channel_peers(const std::string& content_id, int max_wait,

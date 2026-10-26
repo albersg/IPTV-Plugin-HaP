@@ -180,3 +180,26 @@ Dos aciertos y un matiz honesto:
 
 No verificado en la caja: pulsar los chips en pantalla. La lógica que deciden los chips es la que produce
 esta tabla; lo que falta es el recorrido con el mando.
+
+## El analizador de transporte, medido en el host
+
+Esta medida no se tomó en la caja: responde a otra pregunta, cuánto cuesta mirar el MPEG-TS mientras
+se reenvía, no cómo se ve la imagen. Banco: x86-64, g++ 14, `-O2`, paquetes TS sintéticos de 188
+bytes con continuidad correcta, alimentados en bloques de 64 KiB (348 paquetes exactos por bloque,
+para que el último paquete no quede partido y la medida no mida una resincronización inventada).
+
+| Métrica | Valor |
+| --- | --- |
+| Bytes analizados | **268.500.096** (256 MiB) |
+| Paquetes | **1.428.192** |
+| Errores de continuidad / sincronización | 0 / 0 |
+| Tiempo de pared | **12 ms** |
+| Throughput | **~21 GiB/s** en un hilo |
+
+A 1,5 Mbps reales eso es aproximadamente el **0,009 % de un núcleo**. El analizador va dentro del
+lector de upstream que ya existía: no añade hilos, no reserva memoria por paquete y mantiene como
+mucho 64 PIDs en una tabla fija.
+
+La segunda medida es la que importa en la caja y todavía no existe: con un canal real, cuántos
+errores de continuidad aparecen en cinco minutos y si el contador de «sin datos» coincide con lo que
+ve el reproductor. Hasta entonces, un transporte limpio no afirma nada sobre la pantalla.

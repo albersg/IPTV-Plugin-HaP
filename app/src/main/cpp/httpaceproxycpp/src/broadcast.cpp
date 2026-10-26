@@ -9,6 +9,15 @@
 
 namespace httpace {
 
+namespace {
+// One monotonic clock for the whole probe: steady_clock never jumps when the wall clock is set.
+std::int64_t steady_millis() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+}
+} // namespace
+
 ChunkQueue::ChunkQueue(std::size_t max_chunks) : max_chunks_(std::max<std::size_t>(2, max_chunks)) {}
 
 PushResult ChunkQueue::push(ChunkPtr chunk) {
@@ -127,7 +136,16 @@ void Broadcast::stop() {
     if (stream_thread_.joinable() && stream_thread_.get_id() != std::this_thread::get_id()) stream_thread_.join();
 }
 
+TsProbe::Counters Broadcast::transport() const {
+    std::lock_guard<std::mutex> lock(probe_mutex_);
+    return probe_.snapshot(steady_millis());
+}
+
 void Broadcast::stream_loop() {
+    {
+        std::lock_guard<std::mutex> lock(probe_mutex_);
+        probe_.reset();
+    }
     try {
         auto started = ace_->start_broadcast(start_params_);
         auto url = rewrite_url_host_port(url_decode(started.url), config_.ace_host, std::to_string(config_.ace_http_port));
@@ -184,6 +202,12 @@ void Broadcast::stream_hls_url(const std::string& url) {
 
 void Broadcast::broadcast_chunk(const char* data, std::size_t size) {
     if (size == 0) return;
+    // One probe per upstream: every client of this broadcast receives the same bytes, so
+    // analysing them once says the same thing about all of them at a fraction of the cost.
+    {
+        std::lock_guard<std::mutex> lock(probe_mutex_);
+        probe_.feed(data, size, steady_millis());
+    }
     // One buffer for every client: the fan-out shares it instead of copying per client.
     auto buffer = std::make_shared<std::vector<char>>(data, data + size);
     ChunkPtr chunk = std::move(buffer);
@@ -316,6 +340,24 @@ std::vector<std::shared_ptr<StreamClient>> BroadcastManager::all_clients() const
     for (const auto& [_, broadcast] : broadcasts_) {
         auto clients = broadcast->clients();
         out.insert(out.end(), clients.begin(), clients.end());
+    }
+    return out;
+}
+
+std::vector<BroadcastManager::StreamTransport> BroadcastManager::stream_transports() const {
+    std::vector<StreamTransport> out;
+    std::lock_guard<std::mutex> lock(mutex_);
+    out.reserve(broadcasts_.size());
+    for (const auto& [_, broadcast] : broadcasts_) {
+        StreamTransport entry;
+        auto clients = broadcast->clients();
+        entry.clients = clients.size();
+        for (const auto& client : clients) {
+            if (entry.channel.empty()) entry.channel = client->channel_name;
+            entry.bytes_sent += client->bytes_sent.load(std::memory_order_relaxed);
+        }
+        entry.counters = broadcast->transport();
+        out.push_back(std::move(entry));
     }
     return out;
 }

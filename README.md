@@ -191,6 +191,31 @@ Available actions:
 There is no separate top-level `Test channel` button; single-channel tests are
 driven by the selected row.
 
+### Transport health
+
+While something plays, `Conexiones` shows one line per upstream: the channel, the
+arrival rate in Mbit/s, the MPEG-TS continuity errors, and how long ago the last
+payload byte arrived (`no data for N s` when the transport went silent).
+
+The same numbers are in the proxy's `/status` answer and in
+`/stat?action=get_clients`, as a `streams` array:
+
+```json
+"streams": [{
+  "channel": "Canal Uno", "clients": 1, "bytesSent": 1048576,
+  "packets": 5580, "payloadBytes": 1022976, "bitrateBps": 1504000,
+  "continuityErrors": 0, "syncErrors": 0, "nullPackets": 12,
+  "pcrDiscontinuities": 0, "lastPayloadAgeMs": 240,
+  "stalled": false, "synchronized": true
+}]
+```
+
+These are transport counters, not a verdict about the picture: a clean TS can
+still freeze in an external player, and `stalled` means the proxy stopped
+receiving payload, not that the screen is black. A stream that never frames a
+packet reports `synchronized: false` instead of pretending to be healthy. No URL,
+token or full infohash is ever included.
+
 ## StreamVault Integration
 
 The service manifest should declare Activity configuration mode:

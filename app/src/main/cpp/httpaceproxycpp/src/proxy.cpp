@@ -442,6 +442,29 @@ void Proxy::send_error(ClientConnection& connection, int status, const std::stri
     send_simple_response(connection, status, "text/plain", message);
 }
 
+Json Proxy::streams_json() {
+    Json::array streams;
+    for (const auto& entry : broadcasts_.stream_transports()) {
+        const auto& counters = entry.counters;
+        streams.push_back(Json::object{
+            {"channel", entry.channel},
+            {"clients", static_cast<double>(entry.clients)},
+            {"bytesSent", static_cast<double>(entry.bytes_sent)},
+            {"packets", static_cast<double>(counters.packets)},
+            {"payloadBytes", static_cast<double>(counters.payload_bytes)},
+            {"bitrateBps", counters.bitrate_bps},
+            {"continuityErrors", static_cast<double>(counters.continuity_errors)},
+            {"syncErrors", static_cast<double>(counters.sync_errors)},
+            {"nullPackets", static_cast<double>(counters.null_packets)},
+            {"pcrDiscontinuities", static_cast<double>(counters.pcr_discontinuities)},
+            {"lastPayloadAgeMs", static_cast<double>(counters.last_payload_age_ms)},
+            {"stalled", counters.stalled},
+            {"synchronized", counters.synchronized}
+        });
+    }
+    return Json::array(std::move(streams));
+}
+
 Json Proxy::clients_json() {
     Json::array clients;
     for (const auto& client : broadcasts_.all_clients()) {
@@ -462,7 +485,8 @@ Json Proxy::clients_json() {
         {"status", "success"},
         {"total_clients", static_cast<double>(broadcasts_.client_count())},
         {"active_broadcasts", static_cast<double>(broadcasts_.broadcast_count())},
-        {"clients_data", clients}
+        {"clients_data", clients},
+        {"streams", streams_json()}
     };
 }
 
@@ -498,7 +522,8 @@ Json Proxy::status_json() {
             {"total_clients", static_cast<double>(broadcasts_.client_count())},
             {"active_broadcasts", static_cast<double>(broadcasts_.broadcast_count())}
         }},
-        {"clients_data", clients_json()["clients_data"]}
+        {"clients_data", clients_json()["clients_data"]},
+        {"streams", streams_json()}
     };
 }
 
