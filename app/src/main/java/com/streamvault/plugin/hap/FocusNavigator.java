@@ -139,6 +139,8 @@ final class FocusNavigator {
     private Anchor lastAnchor;
     /** Where the user was when this window lost focus, restored when it comes back. */
     private Anchor pausedAnchor;
+    /** The control a service transition took focus from, restored when the controls come back. */
+    private WeakReference<View> transitionFocus;
 
     private HapSections.Section section = HapSections.Section.INICIO;
 
@@ -355,6 +357,40 @@ final class FocusNavigator {
         return focusCell(graph, index);
     }
 
+    /**
+     * Remembers the control that has focus before a service transition disables the controls.
+     *
+     * <p>{@code setBusy} disables every control that can start an operation, including the one the
+     * user is on. Android then moves focus to the first focusable view, which is the Inicio rail
+     * entry; on the box the next press opened Inicio instead of operating the switch. The repair in
+     * {@link #onFocusChanged} cannot help there: while the whole section is disabled its graph is
+     * empty, so there is nothing to restore to. This memory survives the transition and is applied
+     * once the controls are enabled again.
+     */
+    void rememberForTransition() {
+        if (detached) return;
+        View focused = root.findFocus();
+        transitionFocus = focused != null && isInside(focused, content)
+                ? new WeakReference<>(focused)
+                : null;
+    }
+
+    /** Gives focus back to the remembered control once a transition re-enabled it. */
+    void restoreAfterTransition() {
+        View target = transitionFocus == null ? null : transitionFocus.get();
+        transitionFocus = null;
+        if (target == null || !target.isAttachedToWindow() || !target.isShown() || !target.isEnabled()) {
+            return;
+        }
+        // Through focusCell, the navigator's single place that requests focus: the memory is by
+        // reference, but a rebuild may have replaced the control, and then the section anchor is the
+        // nearest surviving place.
+        Graph graph = Graph.of(content, FocusGrid.Edges.CLAMPED, false);
+        int index = graph.indexOf(target);
+        if (index != FocusGrid.NO_INDEX && focusCell(graph, index)) return;
+        focusAnchor(graph, sectionAnchors.get(section));
+    }
+
     /** Remembers the control that has focus, before this window loses it. */
     void rememberFocus() {
         if (detached) return;
@@ -433,6 +469,14 @@ final class FocusNavigator {
     private void onFocusChanged(View oldFocus, View newFocus) {
         if (detached || !root.hasWindowFocus()) return;
         boolean lost = newFocus == null || (oldFocus != null && !oldFocus.isAttachedToWindow());
+        if (!lost && oldFocus != null && isInside(oldFocus, content) && isInside(newFocus, rail)) {
+            // Focus reached the rail. If the control the user was on is still attached and enabled,
+            // the navigator moved it there on purpose (LEFT); otherwise the platform took it away -
+            // typically because the control was disabled while a service transition runs - and the
+            // section has to get it back on a surviving control.
+            boolean stillUsable = oldFocus.isAttachedToWindow() && oldFocus.isEnabled();
+            lost = FocusRepair.shouldReturnToSection(true, stillUsable, true);
+        }
         if (lost) {
             Anchor anchor = lastAnchor != null ? lastAnchor : pausedAnchor;
             if (anchor != null) focusAnchor(graphOf(anchor), anchor);

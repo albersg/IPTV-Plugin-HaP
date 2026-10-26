@@ -142,6 +142,7 @@ public class HapConfigActivity extends Activity {
     private final AtomicBoolean statusPollInFlight = new AtomicBoolean(false);
     private final Map<String, HapBridge.PeerResultInfo> peerResults = new HashMap<>();
     private final List<View> busyControls = new ArrayList<>();
+    private int busyDepth;
 
     /** One pre-built view per section, keyed by {@link HapSections.Section#ordinal()}. */
     private final SparseArray<View> sectionViews = new SparseArray<>();
@@ -4223,10 +4224,29 @@ public class HapConfigActivity extends Activity {
         });
     }
 
+    /**
+     * Disables the controls that start a service operation, and gives the focus back when it ends.
+     *
+     * <p>Disabling the focused switch is what the platform needs (a second press while a transition
+     * runs would start a second operation), but it also takes focus away: Android moves it to the
+     * first focusable view, which is the Inicio rail entry. On the box that made the next press open
+     * Inicio instead of operating the switch the user was on. The focused control is remembered for
+     * the duration of the transition and asked for focus again when the controls come back; the
+     * navigator's own repair cannot do it, because while every control of the section is disabled its
+     * graph is empty and there is nothing to restore to.
+     */
     private void setBusy(boolean busy) {
-        for (View control : busyControls) {
-            control.setEnabled(!busy);
+        if (busy) {
+            if (busyDepth == 0 && focusNavigator != null) focusNavigator.rememberForTransition();
+            busyDepth++;
+        } else {
+            busyDepth = Math.max(0, busyDepth - 1);
         }
+        boolean disabled = busyDepth > 0;
+        for (View control : busyControls) {
+            control.setEnabled(!disabled);
+        }
+        if (!disabled && focusNavigator != null) focusNavigator.restoreAfterTransition();
     }
 
     private void showMessage(String message) {

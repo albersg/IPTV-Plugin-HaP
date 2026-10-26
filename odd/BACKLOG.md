@@ -102,6 +102,10 @@ short bitrate dip is not a failure.
   `android:exported="false"`. The manifest keeps the exact one-line reopening instructions for when
   StreamVault is installed and a real caller check exists.
 - **D3 — RecyclerView.** Delivered in `02f6d09`; the device walk is V5 above.
+- **Focus lost to the rail while a service transition disables the focused control.** Fixed and
+  verified on the box: the control is remembered for the duration of the transition and given focus
+  back when it ends (`odd/tasks/hap-focus-during-transitions.md`). This was the real cause behind the
+  old "DOWN from the Privacy switch escaped to the rail" report, not the navigator's row model.
 - **F5** — peer checks are capped at two and wait with a deadline (`proxy.cpp`, `test_util.cpp`
   sibling coverage in `proxy` code).
 - **F9** — request targets and resolved URLs are redacted; pinned by `LogRedactionTest` and
