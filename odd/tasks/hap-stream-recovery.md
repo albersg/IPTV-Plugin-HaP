@@ -32,6 +32,11 @@ leaving never retries.
 S6 — Observability: each broadcast counts its recoveries and `/status`/`/stat?action=get_clients`
 expose them as `recoveries`, so a comparative run does not depend on log scraping.
 
+S7 — A session that produces nothing must not hold the retry behind the full configured timeout: with
+recovery on, the upstream read timeout is the smaller of the configured value and 15 s, and it is never
+raised. Measured on the box, this does not shorten the *silent channel* case, because the engine ends
+that session itself at ~30 s; it covers a socket that stalls without the engine noticing.
+
 ## Tasks
 
 | ID | Task | Specs | Route | Commit |
@@ -40,6 +45,7 @@ expose them as `recoveries`, so a comparative run does not depend on log scrapin
 | R2 | Retry loop in `Broadcast`, interruptible wait, probe reset per session, `recoveries` in the JSON | S1, S4, S5, S6 | parent | this commit |
 | R3 | Persisted switch, native config plumbing and the Ajustes panel | S2, S3 | parent | this commit |
 | R4 | Box run with the flag on: cold channel recovers, live channel does not falsely retry | S1, S5, S6 | parent | this commit |
+| R5 | Read timeout shortened while recovery is on, with four host tests | S7 | parent | this commit |
 
 ## Log
 
@@ -70,6 +76,16 @@ L5 — Flag off is the shipped state: one pass through the loop, `retry_backoff_
 
 L6 — Checks: native **81/81** (7 policy tests), JVM suite green with the panel mapping updated,
 `:app:assembleUniversalDebug` and `:app:lintArmv7Debug` green, signed release installed on the box.
+
+L8 — Silent channel on the box, 2026-10-27, flag on: `DAZN Baloncesto 1080p **` returned headers in
+1.59 s and then sent **zero bytes**; the retry fired at **+30 s**, not +15 s, because the engine ends the
+session on its own prebuffer window first (`prebuf;0;0;…` once a second for 30 s). The second session
+waited the same. So S7 covers a stalled socket, and a faster recovery for this case needs a watchdog on
+*zero progress*, not on bytes.
+
+L9 — While reading that log: with the flag off, every unexpected end logged
+`ERROR giving up after 0 retries`, which blames a policy that was never asked to do anything. The line
+now only appears when attempts were configured.
 
 L7 — Not covered, and the reasons: a comparative A/B on a cold channel is not reproducible on demand
 (the swarm warms up); no player was involved, so "the player reloads or not after a retry" is untested;

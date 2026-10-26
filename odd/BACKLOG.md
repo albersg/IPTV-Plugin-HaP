@@ -20,21 +20,25 @@ fixture exercised the other two wordings (`no MPEG-TS recognised`, `no data for 
 sits above the Refresh button because below the client rows it fell past the last focusable control.
 
 **V3 — BACK and focus memory, section by section.** BACK returning to Inicio is confirmed on the
-device. The per-section anchor was attempted and the test was inconclusive: activating a rail entry
-leaves focus on the rail by design, so the check has to move focus into the section first, then leave
-and come back. Both behaviours are covered by units; the round trip per section has not been walked.
+device, again in this walk. The remaining half is the round trip: enter a section, move three rows,
+leave with BACK, come back, and land where you left. Activating a rail entry leaves the focus on the
+rail by design, so the walk has to press RIGHT first; the next attempt must do that and then compare
+the focused control before and after, not the rail label.
 
-**V4 — D-pad and focus inside a section.** Verified on the emulator (see
-`odd/tasks/hap-focus-visual-rows.md`): the rail reaches `Conexiones` in four presses at 0.2 s and at
-1.5 s spacing, scrolls the focused entry into view, BACK returns to `Inicio`, a DOWN at the last
-control of a section stays there, and RIGHT walks within a row. The earlier "swallowed press" was an
-artifact of sending one `adb shell` per event, not the app. A real defect was found and fixed on the
-way: rows followed the view tree, so DOWN from the second URL in `Conexiones` jumped up to the LAN
-switch. The box still owes the same walk, including the Ajustes panels.
+**V4 — D-pad and focus inside a section. Done on the box.** `tools/tv-audit.sh` enters every section
+from a cold start (DOWN ×N + OK + RIGHT, all inside one `adb shell`) and records the focused control
+at each step. The traces: Inicio server switch → how-to card → lists card (clamped); Canales status →
+load lists → search field (clamped); Eventos stays on `Todos`, whose next neighbour is to the right;
+Fuentes two buttons (clamped); Conexiones Copy → LAN switch → refresh → restart (clamped); Ajustes
+IPFS → Copy → Advanced → Log → wipe → recovery → check now → update settings (clamped). One real
+finding: RIGHT is required after OK, because activating a rail entry leaves the focus on the rail.
 
-**V5 — RecyclerView rows at full length.** The list is installed and has not crashed, but Google
-TV's ambient screensaver took the screen during the check, so the list has never been looked at with
-rows in it. Closes with the list scrolled to both ends and focus following.
+**V5 — RecyclerView rows at full length. Done, and it found a defect.** The first walk showed the
+Canales section saying "Carga una lista para ver sus canales" with two playlists on disk and the
+server stopped: the catalogue was only filled by the proxy or by pressing "Cargar listas". The
+section now fills itself from the playlist files when it opens with nothing rendered, and the box
+then showed `lista-unificada.m3u (388)`. Walking the list reached the last row (`UFC FIGHT PASS *`),
+where forty more DOWN presses changed nothing: rows recycle, focus follows and the app stays up.
 
 **V6 — Stress evidence.** A connection closed mid-stream, several clients with one deliberately slow,
 a prolonged stream, channel testing while playing, and a check that no thread or socket is left
@@ -53,8 +57,11 @@ leaves without recording a decision.
 scroll of a long LAN URL, and legibility at three metres.
 
 **V10 — Overscan and TalkBack.** At 1280x720 / 213dpi the emulator renders the same 960x540dp
-layout with no edge clipping (the section scrolls under the footer as designed). No content
-description has been heard through a screen reader.
+layout with no edge clipping (the section scrolls under the footer as designed). Accessibility now
+has evidence: six switches had no label of their own and were announced as "switch, off" with no
+subject; each one carries its row label now, `ControlLabelsTest` pins it, and `tools/tv-audit.sh`
+walked all six sections with ten D-pad positions each reporting zero focusable nodes without a name
+(`tools/a11y-audit.py`, with a negative control). Not done: hearing it through TalkBack itself.
 
 ## 2. Measurements still missing
 
@@ -68,11 +75,13 @@ at rest.
 
 | ID | Item | Why it is open |
 | --- | --- | --- |
-| P4 | Make the automatic update check optional (manual-only) | `UpdateSettings` stores an interval and an on/off flag, but the screen offers no manual-only mode; today a check runs when the screen opens, gated by the stored interval |
+| ~~P4~~ | ~~Make the automatic update check optional (manual-only)~~ | Resolved: it was already implemented. `maybeRunAutomaticUpdateCheck` asks `UpdateSettings.isAutomaticCheckDue`, which starts with `isAutomaticCheckEnabled`, and the switch in the panel turns it off; with it off, only "Comprobar ahora" checks. The switch was missing its TalkBack label, not its behaviour |
 | — | Resolve the OkHttp/Okio thread mystery | 22 threads run while `dependencyInsight` finds no OkHttp and no marker appears in the dex, yet OkHttp-style threads were observed earlier. Resolve by sampling stack traces (`debuggerd -b <tid>` or Perfetto), not by guessing |
 | — | Visual review of `Canales`, `Fuentes`, `Ajustes` | Only `Inicio` and `Conexiones` have been reviewed visually; the `Fuentes` empty state is two buttons and a lot of nothing |
 | — | Confirm the folded panels in `Ajustes` | `c74a73a` changed the collapsed padding and was verified for `Canales`; the other folded panels were not walked after it |
 | — | D-pad row order outside `Conexiones` | The fix is global (`FocusRows`), verified on `Conexiones`, `Inicio` and the rail; no other section had a two-column composition to exercise it, so a walk of `Fuentes` and `Ajustes` on the box is still owed |
+| — | Prebuffer watchdog | Measured on the box: a channel the engine accepts and never feeds sits in `prebuf;0;0;…` for the engine's own ~30 s window, and the reader's timeout does not shorten it (the engine ends the session first). A retry did revive one such channel earlier, so acting on *zero progress* after ~20 s would recover sooner; the threshold and the signal (STATUS counters, not bytes) need a test before it ships |
+| — | Vendor AceStream app on the same box | Measured: with `org.acestream.node.web` running, HaP's server start fails ("El servidor tiene un problema") because the vendor app holds the engine; force-stopping it made the same build start. A real coexistence note for the UI or the docs, not yet handled |
 | — | Branch hygiene | The branch carries roughly 14,000 authored lines across 38 commits and long passed the ~400-line review slice. History will not be rewritten this late; a proper review needs chained PRs by area |
 
 ## 4. Stream recovery
@@ -89,11 +98,26 @@ What is still missing before it can become the default:
   before the first retry starts; the threshold has to be measured, not guessed.
 - A player test: a retry is a new session (new PIDs, continuity and PCR), so whether the player resumes
   or has to reload is unknown.
+- The prebuffer watchdog above: today the retry waits for the engine's own prebuffer window.
 - A comparative run against the flag off, on the same channel and time window, to show it does not make
   things worse.
 - Source failover and engine switching remain out of scope: they need this one to be proven first.
 
-## 5. Decisions recorded, with their revisit triggers
+## 5. Fast start, measured and not tuned
+
+Cold start per channel on the box, six channels, server freshly started: time to first byte **0.98,
+1.21, 1.34, 1.39, 1.40 and 1.73 s**; `/aio` (388 channels, 42 KB) 8.6-17.6 ms and `/stat` 4.6-11.5 ms.
+Two of the six were silent channels that sent zero bytes and were closed at ~31 s.
+
+Consequences recorded rather than features added:
+
+- No buffer or timeout tuning: the first byte arrives in about a second, so the knob with the most
+  room is not the buffer.
+- No keep-warm: holding a broadcast alive after the last client would save at most ~1.4 s on a return
+  within the window, at the cost of keeping an engine session (39-50 % of a core, ~280 MB) alive for a
+  channel nobody is watching. Not worth it; the source is the engine, not the proxy.
+
+## 6. Decisions recorded, with their revisit triggers
 
 - **Stay on Java and Android Views.** No Compose. Large lists now have device-adjacent proof
   (RecyclerView + units) but not a device walk; playback remains unverified, so the decision stays
@@ -106,7 +130,7 @@ What is still missing before it can become the default:
   proxy is loopback-only as intended, but the engine listens on `0.0.0.0` at 6878, 62062, 8621 and
   its peer port, with or without `--bind-all`.
 
-## 6. Resolved, kept so they are not reopened
+## 7. Resolved, kept so they are not reopened
 
 - **D1 — exported StreamVault service.** Closed: `StreamVaultHapPluginService` is
   `android:exported="false"`. The manifest keeps the exact one-line reopening instructions for when

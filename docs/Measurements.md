@@ -252,3 +252,30 @@ Dos hechos que el brief pedía y que ahora están medidos:
 - **El motor es el coste dominante**: 39–50 % de un núcleo y ~280 MB de RSS mientras sirve un canal.
   En un SoC de 4 núcleos eso es ~10–12 % del total, sostenido durante 13 minutos. No es una medida de
   arranque: es el estado estacionario.
+
+## Arranque en frío de un canal, seis canales seguidos (2026-10-26)
+
+Servidor recién arrancado, `adb forward` y `curl -w`, canal tras canal sin reutilizar ninguno:
+
+| Canal | Primer byte | Bytes recibidos | Cierre |
+| --- | --- | --- | --- |
+| `ALTITUDE SPORTS *` | **1,39 s** | 52,4 MB | sigue |
+| `ALTITUDE SPORTS 1080p *` | **1,40 s** | 50,3 MB | sigue |
+| `DAZN Baloncesto 1080p **` | **1,73 s** | 0 | 31,7 s |
+| `DAZN Baloncesto 2 720p *` | **0,98 s** | 40,9 MB | sigue |
+| `DAZN Baloncesto 720p *` | **1,21 s** | 55,6 MB | sigue |
+| `DAZN Baloncesto 720p **` | **1,34 s** | 0 | 31,3 s |
+
+Y el proxy en el mismo estado: `/aio` con 388 canales (42.270 bytes) tarda **8,6–17,6 ms** hasta el
+primer byte, y `/stat?action=get_clients` **4,6–11,5 ms**.
+
+Lectura: un canal sano entrega el primer byte en ~1–1,7 s, así que el margen de mejora no está en los
+buffers. Los dos canales que el motor acepta y no alimenta no son un caso de lento: envían cero bytes
+durante ~31 s, que es la ventana de prebuffer del propio motor (`prebuf;0;0;…` cada segundo), no el
+timeout del lector. Por eso el arranque en caliente (mantener el broadcast vivo) no se implementa: como
+mucho ahorraría ~1,4 s en una vuelta, a cambio de dejar el motor encendido (39–50 % de un núcleo,
+~280 MB) para un canal que nadie mira.
+
+En la misma sesión se midió la recuperación con la bandera encendida sobre un canal silencioso: el
+primer reintento llega tras **~30 s**, porque quien cierra la sesión es el motor, y el segundo vuelve a
+esperar lo mismo. El watchdog que falta no es de bytes: es de progreso cero en `STATUS`.

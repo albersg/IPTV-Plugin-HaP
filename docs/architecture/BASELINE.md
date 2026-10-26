@@ -14,8 +14,8 @@ the code or the command that proves it.
 
 | What | Command or file | Result |
 | --- | --- | --- |
-| JVM + Robolectric suite | `./gradlew :app:testUniversalDebugUnitTest` | **240 tests, 0 failures**, 28 files |
-| Native suite | `cmake -S native-tests -B build/native-tests && ctest --test-dir build/native-tests` | **70 tests, 0 failures** |
+| JVM + Robolectric suite | `./gradlew :app:testUniversalDebugUnitTest` | **253 tests, 0 failures**, 29 files |
+| Native suite | `cmake -S native-tests -B build/native-tests && ctest --test-dir build/native-tests` | **85 tests, 0 failures** |
 | APK | `./gradlew :app:assembleUniversalDebug` | green, both ABIs |
 | Lint | `./gradlew :app:lintArmv7Debug` | green, 0 errors (133 warnings, none new-blocking) |
 | CI | `.github/workflows/native-tests.yml`, `build-apk.yml` | ctest + lint + release build; release requires the signing secrets |
@@ -42,6 +42,8 @@ this repository; the code areas it lists are still accurate.
 | Transport health: per-upstream continuity, PCR, resync, arrival rate, stall | `ts_probe.cpp`, 16 `TsProbe` tests, `TransportStatusTest`; measured below |
 | IPFS: bundled kubo on its own supervisor thread, LAN switch tied to `ProxyExposure` | `IpfsRuntime`, `IpfsSettings`, `HapServiceStatesTest` |
 | StreamVault companion service: **closed to other apps** | `AndroidManifest.xml` (`android:exported="false"`), reopening comment in place |
+| TalkBack can name every control | `ControlLabelsTest` (every `Switch` carries its row label); `tools/a11y-audit.py` over `tools/tv-audit.sh` on the box: 6 sections × 10 D-pad positions, **0 focusable nodes without a name**, with a negative control |
+| Channel list without the server | Canales fills itself from the playlist files when it opens with nothing rendered; verified on the box (`lista-unificada.m3u (388)` with the server stopped) |
 
 ### Implemented, pending validation
 
@@ -64,7 +66,7 @@ the box has not been observed, or was observed before the current shell.
 
 | Capability | State |
 | --- | --- |
-| Bounded retry of the same upstream (`Ajustes → Recuperación de emisión`) | Implemented and **off by default**: 3 attempts, exponential backoff with deterministic jitter capped at 8 s, `recoveries` in `/status`. Recovered a real cold channel on the box after 2 attempts (368,083 packets afterwards); no false retry on a healthy stream. Not yet a default: no player has been tested across a retry, and a retry restarts the session's PIDs, continuity and PCR. See `odd/tasks/hap-stream-recovery.md`. |
+| Bounded retry of the same upstream (`Ajustes → Recuperación de emisión`) | Implemented and **off by default**: 3 attempts, exponential backoff with deterministic jitter capped at 8 s, `recoveries` in `/status`, and a shortened upstream read timeout while it is on. Recovered a real cold channel on the box after 2 attempts (368,083 packets afterwards); no false retry on a healthy stream. Measured limit: a channel the engine never feeds still waits the engine's own ~30 s prebuffer window, because the engine ends that session before the reader does. Not yet a default: no player has been tested across a retry, and a retry restarts the session's PIDs, continuity and PCR. See `odd/tasks/hap-stream-recovery.md`. |
 
 `HapDebugControlActivity` exists only in debug builds (`app/src/debug/AndroidManifest.xml`) and is not
 part of the product surface.
@@ -98,6 +100,7 @@ Ordered by the sequence in which they reduce risk, not by novelty.
 | Stopping the AceStream engine from binding `0.0.0.0` | measured on the box: the engine listens on all interfaces with or without `--bind-all`; no app-level fix was found |
 | Shipping Outpace inside the APK | AGPL-3.0-or-later next to a proprietary engine is a distribution decision, not an engineering one; external use can be evaluated without shipping it |
 | 16 KiB support for proprietary binaries | the vendor binaries are not ours to rebuild |
+| Coexistence with the vendor AceStream app | measured: while `org.acestream.node.web` runs, HaP's server start fails because the vendor app holds the engine; force-stopping it made the same build start. Not handled in the UI yet |
 
 ## Transport health, measured
 

@@ -169,6 +169,30 @@ ADB=... tools/device-check.sh control start
 ADB=... tools/device-check.sh control status
 ```
 
+### On-device accessibility and focus walk
+
+`tools/tv-audit.sh` walks the six sections with the D-pad on a real TV and
+audits every visible position with `tools/a11y-audit.py`: a focusable node
+without text or content description fails the walk. Each section is entered from
+a cold start inside one `adb shell`, because one shell per key event drops
+presses and audits a section that never opened. Dumps are retried, because
+`uiautomator dump` fails while the UI animates and leaves the previous file.
+After OK on a rail entry, press RIGHT: the design leaves the focus on the rail.
+
+```sh
+ADB=... SERIAL=... tools/tv-audit.sh
+ADB=... SERIAL=... STEPS=12 tools/tv-audit.sh
+```
+
+### Vendored binaries
+
+`tools/vendor-sbom.py` hashes every binary committed verbatim (the kubo
+executable, the engine launcher, the engine script) into
+`docs/supply-chain/vendor-sbom.json`. `--check` fails when one changed without
+regenerating it, and CI runs that. It does not claim to cover the AceStream
+engine or the Python interpreter, which come from the device firmware;
+`docs/supply-chain/README.md` says so.
+
 ## Interface
 
 `HapConfigActivity` is now a shell, not the interface itself. Its root is
