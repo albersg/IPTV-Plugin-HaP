@@ -1323,12 +1323,14 @@ public class HapConfigActivity extends Activity {
         clientsStatusView.setPadding(dp(10), 0, 0, 0);
         controls.addView(clientsStatusView, wrapWrap());
 
-        // One compact block under the client rows: what the transport of each upstream is doing.
-        // It stays a single TextView so a 1 Hz refresh cannot rebuild anything.
+        // One compact block at the top of the panel: what the transport of each upstream is doing.
+        // At the top, because below the rows it would sit past the last focusable control and a
+        // scroll that only follows focus would never reveal it (seen on the emulator). It stays a
+        // single TextView so a 1 Hz refresh cannot rebuild anything.
         transportView = text("", 12, COLOR_TEXT_TERTIARY, Typeface.NORMAL);
         transportView.setPadding(0, dp(10), 0, 0);
         transportView.setVisibility(View.GONE);
-        panel.body.addView(transportView, matchWrap());
+        panel.body.addView(transportView, 0, matchWrap());
 
         clientsContainer = new LinearLayout(this);
         clientsContainer.setOrientation(LinearLayout.VERTICAL);

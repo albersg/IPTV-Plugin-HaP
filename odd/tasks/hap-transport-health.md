@@ -122,3 +122,16 @@ creation, and the Java doc no longer claims the two arrays are atomic with each 
 Re-verified after the fixes: native suite **74/74**, host throughput unchanged (~21 GiB/s), and the
 JVM/APK/lint run recorded in the same session. Still not verified: the `/status` key set over a real
 HTTP request (no host proxy binary) and the Conexiones line on the TV (V2).
+
+L7 — Verified on the Android emulator (`haptv`, 1920x1080 at 320dpi, arm64 debug) with a host
+fixture served through `adb reverse tcp:8888 tcp:8888` (`tools/stat-fixture.py`, documented in
+`docs/Emulator.md`). With three upstreams the panel painted `Canal Uno · 1.5 Mb/s · 0 continuity
+errors · data 0 s ago`, `Canal Dos · 0.0 Mb/s · 0 continuity errors · no MPEG-TS recognised` and
+`Canal Tres · 0.0 Mb/s · 7 continuity errors · no data for 120 s`. The block had to move from below
+the client rows to the top of the panel: below the rows it fell past the last focusable control, and
+a scroll that only follows focus never revealed it. This is the app half (JSON contract, parsing,
+painting); the proxy half on a real stream is still owed.
+
+The same walk exposed a navigation defect unrelated to transport: DOWN from the second URL landed on
+the LAN switch one visual row above, because rows followed the view tree. Fixed in
+`odd/tasks/hap-focus-visual-rows.md` and re-verified on the emulator.
