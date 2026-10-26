@@ -103,6 +103,7 @@ final class FocusNavigator {
         static Graph of(View container, FocusGrid.Edges edges, boolean rail) {
             List<Row> rows = new ArrayList<>();
             collect(container, rows);
+            rows = inVisualOrder(rows);
             int[] sizes = new int[rows.size()];
             int cells = 0;
             for (int i = 0; i < rows.size(); i++) {
@@ -504,6 +505,48 @@ final class FocusNavigator {
             row.cells.addAll(cells);
             rows.add(row);
         }
+    }
+
+    /**
+     * Re-orders the collected rows by where they actually are, keeping tree order as the fallback.
+     *
+     * <p>Collection follows the view tree, which is right for a stack and wrong for a composed line:
+     * the {@code Conexiones} panel puts two URL rows in a left column and the LAN switch in a right
+     * column, so tree order reads "URL, URL, switch" while the screen reads "URL + switch, URL". The
+     * repair is arithmetic in {@link FocusRows}; this only measures the cells and rebuilds the rows.
+     * If any cell is unmeasured, {@link FocusRows#order} answers {@code null} and nothing moves.
+     */
+    private static List<Row> inVisualOrder(List<Row> rows) {
+        int count = 0;
+        for (Row row : rows) count += row.cells.size();
+        if (count < 2) return rows;
+        int[] tops = new int[count];
+        int[] lefts = new int[count];
+        int[] bottoms = new int[count];
+        List<View> cells = new ArrayList<>(count);
+        int[] location = new int[2];
+        int index = 0;
+        for (Row row : rows) {
+            for (View cell : row.cells) {
+                cell.getLocationInWindow(location);
+                tops[index] = location[1];
+                lefts[index] = location[0];
+                bottoms[index] = location[1] + cell.getHeight();
+                cells.add(cell);
+                index++;
+            }
+        }
+        FocusRows.Rows ordered = FocusRows.order(tops, lefts, bottoms);
+        if (ordered == null) return rows;
+        List<Row> result = new ArrayList<>(ordered.sizes.length);
+        int cursor = 0;
+        for (int size : ordered.sizes) {
+            Row row = new Row();
+            for (int i = 0; i < size; i++) row.cells.add(cells.get(ordered.order[cursor + i]));
+            result.add(row);
+            cursor += size;
+        }
+        return result;
     }
 
     private static boolean isHorizontal(ViewGroup group) {
