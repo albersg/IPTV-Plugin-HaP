@@ -42,7 +42,7 @@ this repository; the code areas it lists are still accurate.
 | Transport health: per-upstream continuity, PCR, resync, arrival rate, stall | `ts_probe.cpp`, 16 `TsProbe` tests, `TransportStatusTest`; measured below |
 | IPFS: bundled kubo on its own supervisor thread, LAN switch tied to `ProxyExposure` | `IpfsRuntime`, `IpfsSettings`, `HapServiceStatesTest` |
 | StreamVault companion service: **closed to other apps** | `AndroidManifest.xml` (`android:exported="false"`), reopening comment in place |
-| TalkBack can name every control | `ControlLabelsTest` (every `Switch` carries its row label); `tools/a11y-audit.py` over `tools/tv-audit.sh` on the box: 6 sections × 10 D-pad positions, **0 focusable nodes without a name**, with a negative control |
+| TalkBack can name every control | `ControlLabelsTest` (every `Switch` carries its row label); `tools/a11y-audit.py` over `tools/tv-audit.sh` on the box: 6 sections × 11 D-pad positions, then 6 × 4 on the final build, **0 focusable nodes without a name** each time, with a negative control |
 | Channel list without the server | Canales fills itself from the playlist files when it opens with nothing rendered; verified on the box (`lista-unificada.m3u (388)` with the server stopped) |
 
 ### Implemented, pending validation

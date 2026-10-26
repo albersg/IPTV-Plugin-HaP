@@ -60,7 +60,7 @@ scroll of a long LAN URL, and legibility at three metres.
 layout with no edge clipping (the section scrolls under the footer as designed). Accessibility now
 has evidence: six switches had no label of their own and were announced as "switch, off" with no
 subject; each one carries its row label now, `ControlLabelsTest` pins it, and `tools/tv-audit.sh`
-walked all six sections with ten D-pad positions each reporting zero focusable nodes without a name
+walked all six sections with eleven D-pad positions each (and four on the final build), every position reporting zero focusable nodes without a name
 (`tools/a11y-audit.py`, with a negative control). Not done: hearing it through TalkBack itself.
 
 ## 2. Measurements still missing
