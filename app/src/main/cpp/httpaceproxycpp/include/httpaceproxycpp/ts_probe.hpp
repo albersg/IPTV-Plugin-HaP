@@ -46,7 +46,10 @@ public:
         std::uint64_t pcr_discontinuities = 0;
         std::uint64_t tracked_pids = 0;
         std::uint64_t untracked_packets = 0;
-        /** Bytes fed inside the last second, in bits per second. */
+        /**
+         * Bytes fed during the last ten 100 ms buckets, in bits per second: the last 0.9-1.0 s.
+         * Quantised to the bucket, never truncated by the number of feeds.
+         */
         double bitrate_bps = 0.0;
         /** Age of the last payload byte, or -1 when no payload has arrived. */
         std::int64_t last_payload_age_ms = -1;
@@ -77,7 +80,8 @@ private:
     static constexpr std::size_t kSlotCount = 128;
     /** While unsynchronized, only this many trailing bytes are kept to look for the next frame. */
     static constexpr std::size_t kMaxUnsyncedBytes = 4096;
-    static constexpr std::size_t kRateSlots = 64;
+    static constexpr std::size_t kRateBuckets = 10;
+    static constexpr std::int64_t kRateBucketMs = 100;
     static constexpr std::size_t kNoOffset = static_cast<std::size_t>(-1);
 
     struct PidState {
@@ -89,8 +93,17 @@ private:
         std::int64_t last_pcr_ms = 0;
     };
 
-    struct RateSample {
-        std::int64_t at = 0;
+    /**
+     * One time bucket of the arrival window.
+     *
+     * <p>A ring of samples was the first version and it was wrong above 64 feeds per second: the
+     * window silently shrank to the newest 64 chunks, so a busy upstream reported a third of its
+     * real rate. A bucket is fixed-size, keeps the sum exact, and the only cost is that the window
+     * edge is quantised to 100 ms.
+     */
+    struct RateBucket {
+        /** Bucket number since the epoch (now_ms / kRateBucketMs), or -1 when unused. */
+        std::int64_t index = -1;
         std::uint64_t bytes = 0;
     };
 
@@ -108,9 +121,7 @@ private:
 
     std::array<PidState, kSlotCount> pids_{};
     std::size_t tracked_pids_ = 0;
-    std::array<RateSample, kRateSlots> rates_{};
-    std::size_t rate_head_ = 0;
-    std::size_t rate_count_ = 0;
+    std::array<RateBucket, kRateBuckets> rates_{};
 
     std::uint64_t packets_ = 0;
     std::uint64_t bytes_ = 0;

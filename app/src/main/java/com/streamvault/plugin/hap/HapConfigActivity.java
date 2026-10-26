@@ -3222,7 +3222,6 @@ public class HapConfigActivity extends Activity {
         }
     }
 
-    /** Applies the connected client rows in place; the status line only changes when it differs. */
     /**
      * Paints one line per active upstream: channel, arrival rate, continuity errors and how old the
      * last payload byte is. These are transport counters, not a claim about the picture on screen
@@ -3261,6 +3260,7 @@ public class HapConfigActivity extends Activity {
         transportView.setVisibility(View.VISIBLE);
     }
 
+    /** Applies the connected client rows in place; the status line only changes when it differs. */
     private void renderClients(List<HapBridge.ConnectedClientInfo> clients) {
         applyText(clientsStatusView, clients.isEmpty()
                 ? getString(R.string.message_no_active_clients)

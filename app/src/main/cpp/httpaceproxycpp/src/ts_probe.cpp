@@ -12,7 +12,8 @@ constexpr unsigned char kDiscontinuityFlag = 0x80;
 constexpr unsigned char kPcrFlag = 0x10;
 constexpr std::size_t kPcrAdaptationLength = 7;
 constexpr std::size_t kHeaderSize = 4;
-constexpr std::int64_t kRateWindowMs = 1000;
+// Ten 100 ms buckets cover 0.9-1.0 s of arrival, quantised at the trailing edge.
+constexpr std::int64_t kRateWindowBuckets = 10;
 // More than one second of PCR regression is a discontinuity; the spec allows a small reorder.
 constexpr std::int64_t kPcrToleranceMs = 1000;
 } // namespace
@@ -27,9 +28,7 @@ void TsProbe::reset() {
     unsynced_ = false;
     pids_.fill(PidState{});
     tracked_pids_ = 0;
-    rates_.fill(RateSample{});
-    rate_head_ = 0;
-    rate_count_ = 0;
+    rates_.fill(RateBucket{});
     packets_ = 0;
     bytes_ = 0;
     payload_packets_ = 0;
@@ -207,23 +206,24 @@ TsProbe::PidState* TsProbe::pid_state(std::uint16_t pid) {
 }
 
 void TsProbe::record_rate(std::uint64_t bytes, std::int64_t now_ms) {
-    if (rate_count_ < kRateSlots) {
-        rates_[rate_count_] = RateSample{now_ms, bytes};
-        rate_count_++;
-    } else {
-        rates_[rate_head_] = RateSample{now_ms, bytes};
-        rate_head_ = (rate_head_ + 1) % kRateSlots;
+    const std::int64_t index = now_ms / kRateBucketMs;
+    RateBucket& bucket = rates_[static_cast<std::size_t>(index % kRateBuckets)];
+    if (bucket.index != index) {
+        bucket.index = index;
+        bucket.bytes = 0;
     }
+    bucket.bytes += bytes;
 }
 
 double TsProbe::window_bitrate(std::int64_t now_ms) const {
+    const std::int64_t newest = now_ms / kRateBucketMs;
     std::uint64_t window_bytes = 0;
-    for (std::size_t i = 0; i < rate_count_; i++) {
-        const RateSample& sample = rates_[i];
-        const std::int64_t age = now_ms - sample.at;
-        if (age >= 0 && age <= kRateWindowMs) window_bytes += sample.bytes;
+    for (const RateBucket& bucket : rates_) {
+        if (bucket.index < 0) continue;
+        const std::int64_t age = newest - bucket.index;
+        if (age >= 0 && age < kRateWindowBuckets) window_bytes += bucket.bytes;
     }
-    // The window is one second wide, so a byte in it is one bit per second times eight.
+    // The buckets cover one second, so a byte in them is one bit per second times eight.
     return static_cast<double>(window_bytes) * 8.0;
 }
 
@@ -245,11 +245,17 @@ TsProbe::Counters TsProbe::snapshot(std::int64_t now_ms) const {
     counters.has_pcr = has_pcr_;
     counters.pcr_pid = pcr_pid_;
     counters.last_pcr_ms = last_pcr_ms_;
-    counters.synchronized = packets_ > 0 && (bytes_ - packets_ * kPacketSize) < 1000;
-
     const std::uint64_t framed = packets_ * kPacketSize;
-    const std::uint64_t held = unsynced_ ? 0 : (buffer_.size() - cursor_);
-    counters.sync_errors = bytes_ > framed + held ? bytes_ - framed - held : 0;
+    const std::uint64_t unframed = buffer_.size() - cursor_;
+    // While synced, the trailing <188 bytes are a packet in progress, not an error. While unsynced
+    // every held byte is a byte that has not framed, so it counts.
+    const std::uint64_t exempt = unsynced_ ? 0 : unframed;
+    counters.sync_errors = bytes_ > framed + exempt ? bytes_ - framed - exempt : 0;
+    // Synchronised means "framing right now", not "framed something once". The unframed backlog is
+    // exactly what the buffer still holds: a preamble that was skipped and then left behind by the
+    // first good packet must not keep the stream looking broken for the rest of its life (the first
+    // version derived this from bytes - packets * 188 and latched false forever).
+    counters.synchronized = packets_ > 0 && unframed < 1000;
 
     if (has_payload_) {
         counters.last_payload_age_ms = std::max<std::int64_t>(0, now_ms - last_payload_ms_);

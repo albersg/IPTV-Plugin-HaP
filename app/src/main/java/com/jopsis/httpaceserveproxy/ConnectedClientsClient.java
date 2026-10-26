@@ -30,9 +30,10 @@ final class ConnectedClientsClient {
     /**
      * Reads one proxy answer: the client rows and the transport of each upstream.
      *
-     * <p>Both live in the same response on purpose. Two requests would paint a client list and a
-     * transport list that were measured at different instants, and the panel would have to explain
-     * a mismatch nobody can act on.
+     * <p>Both live in the same response on purpose: two requests would paint a client list and a
+     * transport list from different answers, and the panel would have to explain a mismatch nobody
+     * can act on. Within one answer the two arrays are still read one after the other, so they
+     * describe nearly the same instant, not atomically the same one.
      */
     static Snapshot parse(String body) throws Exception {
         JSONObject root = new JSONObject(body);

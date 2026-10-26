@@ -491,6 +491,9 @@ Json Proxy::clients_json() {
 }
 
 Json Proxy::status_json() {
+    // One answer, reused: calling clients_json() for its field and streams_json() again would take
+    // two transport snapshots for one response and throw one of them away.
+    Json clients = clients_json();
     Json::array loaded;
     for (const auto& plugin : plugins_.unique_plugins()) {
         Json::array handlers;
@@ -522,8 +525,8 @@ Json Proxy::status_json() {
             {"total_clients", static_cast<double>(broadcasts_.client_count())},
             {"active_broadcasts", static_cast<double>(broadcasts_.broadcast_count())}
         }},
-        {"clients_data", clients_json()["clients_data"]},
-        {"streams", streams_json()}
+        {"clients_data", clients["clients_data"]},
+        {"streams", clients["streams"]}
     };
 }
 

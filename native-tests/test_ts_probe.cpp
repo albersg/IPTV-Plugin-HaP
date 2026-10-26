@@ -111,13 +111,72 @@ TEST(TsProbe, CleanStreamHasNoErrorsAndReportsRate) {
     EXPECT_EQ(counters.last_payload_age_ms, 0);
 }
 
-TEST(TsProbe, BitrateWindowAgesOutAfterOneSecond) {
+TEST(TsProbe, BitrateWindowAgesOutAfterTenBuckets) {
     httpace::TsProbe probe;
     auto bytes = bytes_of(sequence(kVideoPid, 10));
     feed(probe, bytes, 0);
     EXPECT_DOUBLE_EQ(probe.snapshot(500).bitrate_bps, 15040.0);
-    EXPECT_DOUBLE_EQ(probe.snapshot(1000).bitrate_bps, 15040.0);
-    EXPECT_DOUBLE_EQ(probe.snapshot(1001).bitrate_bps, 0.0);
+    // The window is ten 100 ms buckets, so a byte at t=0 is in the window until bucket 9 ends.
+    EXPECT_DOUBLE_EQ(probe.snapshot(999).bitrate_bps, 15040.0);
+    EXPECT_DOUBLE_EQ(probe.snapshot(1000).bitrate_bps, 0.0);
+}
+
+TEST(TsProbe, ArrivalRateIsBoundedByTimeNotByTheNumberOfFeeds) {
+    // A libcurl callback can fire far more than 64 times a second. A ring of 64 samples silently
+    // shrank the window; 250 feeds inside one second must still report all 250.
+    httpace::TsProbe probe;
+    std::int64_t now = 0;
+    for (int i = 0; i < 250; i++) {
+        feed(probe, bytes_of(sequence(kVideoPid, 10, static_cast<std::uint8_t>(i * 10))), now);
+        now += 4;
+    }
+    EXPECT_NEAR(probe.snapshot(996).bitrate_bps, 250.0 * 1880.0 * 8.0, 3760.0);
+}
+
+TEST(TsProbe, APreambleLongerThanOneKilobyteStillReportsSynchronisation) {
+    // The first version derived "synchronized" from bytes - packets * 188, so a preamble that was
+    // skipped once kept the stream marked broken for the rest of its life.
+    httpace::TsProbe probe;
+    std::vector<char> bytes(1500, 'x');
+    auto packets = bytes_of(sequence(kVideoPid, 40));
+    bytes.insert(bytes.end(), packets.begin(), packets.end());
+    feed(probe, bytes, 0);
+    feed(probe, bytes_of(sequence(kVideoPid, 200, 40)), 100);
+
+    auto counters = probe.snapshot(100);
+    EXPECT_EQ(counters.packets, 240u);
+    EXPECT_EQ(counters.continuity_errors, 0u);
+    EXPECT_EQ(counters.sync_errors, 1500u);
+    EXPECT_TRUE(counters.synchronized);
+}
+
+TEST(TsProbe, UnsyncedStreamKeepsAtMostFourKiBUnaccounted) {
+    httpace::TsProbe probe;
+    std::vector<char> garbage(10 * 1024, 'x');
+    for (int i = 0; i < 100; i++) feed(probe, garbage, i);
+
+    auto counters = probe.snapshot(100);
+    EXPECT_EQ(counters.packets, 0u);
+    EXPECT_FALSE(counters.synchronized);
+    // Whatever is not counted as a sync error is the bounded tail still held for a resync.
+    EXPECT_LE(counters.bytes - counters.sync_errors, 4096u);
+}
+
+TEST(TsProbe, ATrackedPidStaysTrackedWhenTheTableIsFull) {
+    httpace::TsProbe probe;
+    std::vector<Packet> many;
+    for (std::uint16_t pid = 0x100; pid < 0x100 + 100; pid++) many.push_back(make_packet({pid, 0}));
+    feed(probe, bytes_of(many), 0);
+    EXPECT_EQ(probe.snapshot(0).tracked_pids, 64u);
+
+    std::vector<Packet> again;
+    for (std::uint16_t pid = 0x100; pid < 0x100 + 64; pid++) again.push_back(make_packet({pid, 1}));
+    feed(probe, bytes_of(again), 1);
+
+    auto counters = probe.snapshot(1);
+    EXPECT_EQ(counters.tracked_pids, 64u);
+    EXPECT_EQ(counters.untracked_packets, 36u);
+    EXPECT_EQ(counters.continuity_errors, 0u);
 }
 
 TEST(TsProbe, DroppedPacketIsExactlyOneContinuityError) {
@@ -328,7 +387,7 @@ TEST(TsProbe, ResetForgetsEverything) {
     EXPECT_EQ(counters.last_payload_age_ms, -1);
 }
 
-TEST(TsProbe, TenMegabytesInSmallChunksStaysBounded) {
+TEST(TsProbe, TenMegabytesInSmallChunksKeepsTheAccounting) {
     httpace::TsProbe probe;
     auto packet = make_packet({kVideoPid, 0});
     std::vector<char> block;

@@ -60,10 +60,13 @@ Ausencia de progreso.» … «Quiero pruebas reproducibles de: Streaming real du
 prolongadas.» The full brief is the message that opened this session; this file quotes every part
 that constrains the slice so a worker never needs it.
 
-L2 — Decisions taken while implementing (T1, T2). `synchronized` and `syncErrors` are derived from
-`bytes - packets*188 - held`, not accumulated: a byte held while resynchronising is an error until it
-starts a frame, and the two views cannot disagree. The rate window is inclusive (`age <= 1000 ms`),
-so a sample exactly one second old still counts and the next millisecond drops it to zero. PID state
+L2 — Decisions taken while implementing (T1, T2). `syncErrors` is derived from
+`bytes - packets*188 - exempt`, not accumulated: while synced, the trailing `<188` bytes are a packet
+in progress and are exempt; while unsynced every held byte counts. `synchronized` is derived from the
+unframed backlog the buffer still holds (`< 1000` bytes) and the fact that something was framed at
+all, so a preamble that was skipped once cannot keep a healthy stream marked broken. The rate window
+is a ring of ten 100 ms buckets (`age < 10`), so the window is 0.9-1.0 s and its edge is quantised,
+never truncated by the number of feeds. PID state
 uses 128 open-addressing slots capped at 64 entries, so the table cannot grow and a lookup is O(1)
 without allocating. `Broadcast` gained a mutex only around `feed`/`snapshot`; the manager's lock is
 taken before the probe's and never the reverse, so the reader thread cannot deadlock against a status
@@ -98,3 +101,24 @@ Three commits, because the component, the exposure and the screen are three revi
 The cumulative 1,305 lines are past the ~400-line review slice for the feature as a whole. The three
 commits are the delivery strategy: each one reverts on its own, and the third can be dropped without
 touching the server side.
+
+L6 — Independent verification found two real defects before this was called done, and both are fixed
+and pinned:
+
+1. **The rate window was sample-count-bounded.** A ring of 64 samples silently truncated the window
+   above 64 feeds per second; 250 feeds in one second reported 962,560 bit/s instead of 3,760,000.
+   Replaced with ten 100 ms buckets. New tests: `ArrivalRateIsBoundedByTimeNotByTheNumberOfFeeds` and
+   the bucket-aware `BitrateWindowAgesOutAfterTenBuckets`.
+2. **`synchronized` latched false forever.** It was derived from cumulative `bytes - packets*188`, so
+   a 1,500-byte preamble that was skipped kept the stream marked broken even after 240 good packets -
+   and the app paints "no MPEG-TS recognised" before it paints stalled. Now derived from the unframed
+   backlog in the buffer. New tests: `APreambleLongerThanOneKilobyteStillReportsSynchronisation`,
+   `ATrackedPidStaysTrackedWhenTheTableIsFull`, `UnsyncedStreamKeepsAtMostFourKiBUnaccounted`.
+
+Three advisories were also taken: `/status` builds the client/stream answer once instead of twice,
+`stream_transports` snapshots outside the manager lock so a status read cannot delay a channel
+creation, and the Java doc no longer claims the two arrays are atomic with each other.
+
+Re-verified after the fixes: native suite **74/74**, host throughput unchanged (~21 GiB/s), and the
+JVM/APK/lint run recorded in the same session. Still not verified: the `/status` key set over a real
+HTTP request (no host proxy binary) and the Conexiones line on the TV (V2).

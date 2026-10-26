@@ -345,10 +345,16 @@ std::vector<std::shared_ptr<StreamClient>> BroadcastManager::all_clients() const
 }
 
 std::vector<BroadcastManager::StreamTransport> BroadcastManager::stream_transports() const {
+    std::vector<std::shared_ptr<Broadcast>> broadcasts;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        broadcasts.reserve(broadcasts_.size());
+        for (const auto& [_, broadcast] : broadcasts_) broadcasts.push_back(broadcast);
+    }
+    // Snapshot outside the manager lock: a status read must not make a channel creation wait.
     std::vector<StreamTransport> out;
-    std::lock_guard<std::mutex> lock(mutex_);
-    out.reserve(broadcasts_.size());
-    for (const auto& [_, broadcast] : broadcasts_) {
+    out.reserve(broadcasts.size());
+    for (const auto& broadcast : broadcasts) {
         StreamTransport entry;
         auto clients = broadcast->clients();
         entry.clients = clients.size();
