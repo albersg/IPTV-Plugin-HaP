@@ -49,6 +49,15 @@ target_include_directories(httpace_chunk_parser_tests PRIVATE ${HTTPACE_CPP_DIR}
 
 target_link_libraries(httpace_chunk_parser_tests PRIVATE GTest::gtest_main)
 
+add_executable(httpace_ts_probe_tests
+    test_ts_probe.cpp
+    ${HTTPACE_CPP_DIR}/src/ts_probe.cpp
+)
+
+target_include_directories(httpace_ts_probe_tests PRIVATE ${HTTPACE_CPP_DIR}/include)
+
+target_link_libraries(httpace_ts_probe_tests PRIVATE GTest::gtest_main)
+
 add_executable(httpace_local_source_tests
     test_local_source.cpp
     ${HTTPACE_CPP_DIR}/src/local_source.cpp
@@ -65,3 +74,4 @@ include(GoogleTest)
 gtest_discover_tests(httpace_util_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_chunk_parser_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_local_source_tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(httpace_ts_probe_tests DISCOVERY_MODE PRE_TEST)
