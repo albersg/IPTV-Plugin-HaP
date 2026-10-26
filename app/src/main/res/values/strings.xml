@@ -399,4 +399,9 @@
     <string name="transport_stalled">no data for %1$d s</string>
     <string name="transport_unsynchronized">no MPEG-TS recognised</string>
     <string name="transport_unnamed">Unnamed channel</string>
+    <string name="section_recovery">Stream recovery</string>
+    <string name="recovery_hint">Retries the same channel a few times when its upstream drops while a player is waiting. Experimental: a retry reopens the stream, so the player may have to reload it. It applies the next time the server starts.</string>
+    <string name="recovery_switch">Retry the same channel</string>
+    <string name="recovery_enabled_note">Recovery will be used the next time the server starts.</string>
+    <string name="recovery_disabled_note">Recovery disabled. It applies the next time the server starts.</string>
 </resources>

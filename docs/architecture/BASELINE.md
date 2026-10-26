@@ -62,8 +62,12 @@ the box has not been observed, or was observed before the current shell.
 
 ### Experimental
 
-Nothing experimental ships today. `HapDebugControlActivity` exists only in debug builds
-(`app/src/debug/AndroidManifest.xml`) and is not part of the product surface.
+| Capability | State |
+| --- | --- |
+| Bounded retry of the same upstream (`Ajustes → Recuperación de emisión`) | Implemented and **off by default**: 3 attempts, exponential backoff with deterministic jitter capped at 8 s, `recoveries` in `/status`. Recovered a real cold channel on the box after 2 attempts (368,083 packets afterwards); no false retry on a healthy stream. Not yet a default: no player has been tested across a retry, and a retry restarts the session's PIDs, continuity and PCR. See `odd/tasks/hap-stream-recovery.md`. |
+
+`HapDebugControlActivity` exists only in debug builds (`app/src/debug/AndroidManifest.xml`) and is not
+part of the product surface.
 
 ### Proposed — no code yet
 

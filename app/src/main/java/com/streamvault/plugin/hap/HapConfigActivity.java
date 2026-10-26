@@ -47,6 +47,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.jopsis.httpaceserveproxy.ChannelTestBatch;
 import com.jopsis.httpaceserveproxy.HapBridge;
+import com.jopsis.httpaceserveproxy.RecoverySettings;
 import com.jopsis.httpaceserveproxy.StopWipe;
 import com.jopsis.httpaceserveproxy.UpdateClient;
 import com.jopsis.httpaceserveproxy.UpdateDownloader;
@@ -682,6 +683,8 @@ public class HapConfigActivity extends Activity {
                 return buildLogsPanel();
             case PRIVACY:
                 return buildPrivacyPanel();
+            case RECOVERY:
+                return buildRecoveryPanel();
             case UPDATE:
                 return buildUpdatePanel();
             case UPDATE_SETTINGS:
@@ -1862,6 +1865,46 @@ public class HapConfigActivity extends Activity {
             StopWipe.setEnabled(this, checked);
         });
         switchRow.addView(wipeOnStopSwitch, wrapWrap());
+
+        return panel.container;
+    }
+
+    /**
+     * The switch for the experimental same-channel retry (odd/tasks/hap-stream-recovery.md).
+     *
+     * <p>Off by default and read when the native proxy starts, so the description says that out loud
+     * instead of promising an immediate effect. It is a preference, not an action: it stays out of
+     * {@link #busyControls} so toggling it cannot move the focus.
+     */
+    private View buildRecoveryPanel() {
+        PanelViews panel = panel(getString(R.string.section_recovery), false, true);
+
+        TextView hint = text(getString(R.string.recovery_hint), 13, COLOR_TEXT_SECONDARY, Typeface.NORMAL);
+        hint.setPadding(0, 0, 0, dp(10));
+        panel.body.addView(hint, matchWrap());
+
+        LinearLayout switchRow = new LinearLayout(this);
+        switchRow.setOrientation(LinearLayout.HORIZONTAL);
+        switchRow.setGravity(Gravity.CENTER_VERTICAL);
+        panel.body.addView(switchRow, matchWrap());
+
+        switchRow.addView(
+                text(getString(R.string.recovery_switch), 14, COLOR_TEXT_PRIMARY, Typeface.BOLD),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        );
+
+        Switch recoverySwitch = new Switch(this);
+        recoverySwitch.setPadding(dp(10), 0, 0, 0);
+        recoverySwitch.setContentDescription(getString(R.string.recovery_switch));
+        recoverySwitch.setChecked(RecoverySettings.isEnabled(this));
+        recoverySwitch.setOnCheckedChangeListener((buttonView, checked) -> {
+            if (suppressSwitchCallbacks) return;
+            RecoverySettings.setEnabled(this, checked);
+            showMessage(getString(checked
+                    ? R.string.recovery_enabled_note
+                    : R.string.recovery_disabled_note));
+        });
+        switchRow.addView(recoverySwitch, wrapWrap());
 
         return panel.container;
     }

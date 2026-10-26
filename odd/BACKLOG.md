@@ -75,13 +75,23 @@ at rest.
 | — | D-pad row order outside `Conexiones` | The fix is global (`FocusRows`), verified on `Conexiones`, `Inicio` and the rail; no other section had a two-column composition to exercise it, so a walk of `Fuentes` and `Ajustes` on the box is still owed |
 | — | Branch hygiene | The branch carries roughly 14,000 authored lines across 38 commits and long passed the ~400-line review slice. History will not be rewritten this late; a proper review needs chained PRs by area |
 
-## 4. Next engineering step
+## 4. Stream recovery
 
-The transport probe is the first input of the recovery work. The next unit is a
-`PlaybackCoordinator` with an explicit state machine and session generations, consuming these counters
-instead of guessing from an open socket. It must stay behind a switch until a comparative run against
-today's behaviour exists, and it must not restart a stream that is merely slow: a drop in peers or a
-short bitrate dip is not a failure.
+A bounded retry of the same upstream now exists behind a switch that ships off
+(`odd/tasks/hap-stream-recovery.md`): when the reader ends while clients are still waiting, the source
+is reopened at most 3 times with exponential backoff, and each broadcast counts its `recoveries` in
+`/status`. It recovered a real cold channel on the box after two attempts (368,083 packets after the
+retry) and does not touch a healthy stream.
+
+What is still missing before it can become the default:
+
+- A no-payload watchdog shorter than the 30 s read timeout. Today a client can wait the whole timeout
+  before the first retry starts; the threshold has to be measured, not guessed.
+- A player test: a retry is a new session (new PIDs, continuity and PCR), so whether the player resumes
+  or has to reload is unknown.
+- A comparative run against the flag off, on the same channel and time window, to show it does not make
+  things worse.
+- Source failover and engine switching remain out of scope: they need this one to be proven first.
 
 ## 5. Decisions recorded, with their revisit triggers
 

@@ -401,4 +401,9 @@
     <string name="transport_stalled">sin datos desde hace %1$d s</string>
     <string name="transport_unsynchronized">sin MPEG-TS reconocible</string>
     <string name="transport_unnamed">Canal sin nombre</string>
+    <string name="section_recovery">Recuperación de emisión</string>
+    <string name="recovery_hint">Reintenta el mismo canal unas pocas veces cuando su origen se corta mientras un reproductor espera. Es experimental: el reintento reabre la emisión, así que puede que el reproductor tenga que recargarla. Se aplica la próxima vez que arranque el servidor.</string>
+    <string name="recovery_switch">Reintentar el mismo canal</string>
+    <string name="recovery_enabled_note">La recuperación se usará la próxima vez que arranque el servidor.</string>
+    <string name="recovery_disabled_note">Recuperación desactivada. Se aplica la próxima vez que arranque el servidor.</string>
 </resources>

@@ -24,7 +24,8 @@ final class HttpAceProxyNative {
             String userM3uSources,
             String customPlaylistPath,
             int maxConnections,
-            int maxConcurrentChannels) {
+            int maxConcurrentChannels,
+            int streamRecoveryAttempts) {
         nativeStart(
                 aceHost,
                 aceApiPort,
@@ -37,7 +38,8 @@ final class HttpAceProxyNative {
                 userM3uSources,
                 customPlaylistPath,
                 maxConnections,
-                maxConcurrentChannels);
+                maxConcurrentChannels,
+                streamRecoveryAttempts);
     }
 
     static native void nativeInitHttpBridge(Class<?> bridgeClass);
@@ -54,7 +56,8 @@ final class HttpAceProxyNative {
             String userM3uSources,
             String customPlaylistPath,
             int maxConnections,
-            int maxConcurrentChannels);
+            int maxConcurrentChannels,
+            int streamRecoveryAttempts);
 
     static native void nativeStop();
 

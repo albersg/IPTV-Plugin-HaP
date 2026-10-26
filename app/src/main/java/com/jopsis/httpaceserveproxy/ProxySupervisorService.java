@@ -305,7 +305,8 @@ public class ProxySupervisorService extends Service {
                         userM3uSources,
                         customPlaylistPath,
                         8,
-                        3);
+                        3,
+                        RecoverySettings.attempts(this));
             } catch (Throwable t) {
                 ServiceState.error("proxy: " + t);
             } finally {

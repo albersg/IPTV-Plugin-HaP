@@ -87,6 +87,7 @@ public final class HapSectionsTest {
                         HapSections.Panel.IPFS_ADVANCED,
                         HapSections.Panel.LOGS,
                         HapSections.Panel.PRIVACY,
+                        HapSections.Panel.RECOVERY,
                         HapSections.Panel.UPDATE,
                         HapSections.Panel.UPDATE_SETTINGS
                 ),
