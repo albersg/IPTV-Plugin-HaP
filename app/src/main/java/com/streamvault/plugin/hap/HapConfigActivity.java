@@ -275,6 +275,7 @@ public class HapConfigActivity extends Activity {
     private boolean pickerTookFocus;
     private List<HapBridge.CustomChannelInfo> currentCustomChannels = new ArrayList<>();
     private List<HapBridge.PluginChannelsInfo> channelPlugins = new ArrayList<>();
+    private boolean channelLoadPending;
     private String editingM3uSourceId = "";
     private String selectedPluginId;
     private String selectedChannelContentId;
@@ -767,6 +768,10 @@ public class HapConfigActivity extends Activity {
         // into the folder while the app runs was invisible until the app was restarted.
         if (section == HapSections.Section.FUENTES && deviceList != null) renderDeviceLists();
 
+        // The playlist files are on the device whether or not the proxy is running, so the channel
+        // list is not left saying "load a list" when two lists are sitting in the folder. This only
+        // fills an empty catalogue: a list already loaded from the proxy is never replaced.
+        if (section == HapSections.Section.CANALES) loadLocalChannelsIfEmpty();
 
         if (section == HapSections.Section.EVENTOS && eventRefreshButton != null
                 && currentEvents.isEmpty() && eventRefreshButton.isEnabled()) {
@@ -4034,6 +4039,33 @@ public class HapConfigActivity extends Activity {
             if (!plugin.channels.isEmpty()) plugins.add(plugin);
         }
         return plugins;
+    }
+
+    /** Fills the channel list from the files on disk when nothing has been rendered yet. */
+    private void loadLocalChannelsIfEmpty() {
+        if (!channelPlugins.isEmpty() || channelLoadPending) return;
+        channelLoadPending = true;
+        try {
+            workExecutor.execute(() -> {
+                List<HapBridge.PluginChannelsInfo> plugins = localChannelPlugins();
+                main(() -> {
+                    channelLoadPending = false;
+                    if (!channelPlugins.isEmpty() || pluginTabList == null) return;
+                    channelPlugins = plugins;
+                    if (!plugins.isEmpty()) {
+                        selectedPluginId = plugins.get(0).id;
+                        selectedChannelContentId = plugins.get(0).channels.isEmpty()
+                                ? null
+                                : plugins.get(0).channels.get(0).contentId;
+                        renderChannelPlugins();
+                        renderChannelFeedback(null);
+                    }
+                });
+            });
+        } catch (RejectedExecutionException ignored) {
+            channelLoadPending = false;
+            // The activity is tearing down; the next visit retries.
+        }
     }
 
     private void checkChannel(String contentId, String channelName) {
