@@ -203,3 +203,52 @@ mucho 64 PIDs en una tabla fija.
 La segunda medida es la que importa en la caja y todavía no existe: con un canal real, cuántos
 errores de continuidad aparecen en cinco minutos y si el contador de «sin datos» coincide con lo que
 ve el reproductor. Hasta entonces, un transporte limpio no afirma nada sobre la pantalla.
+
+## Un stream real, en la caja, con el analizador de transporte
+
+Canal `ALTITUDE SPORTS *` (`content_id` de la lista del usuario), servido por el proxy de HaP hacia
+`127.0.0.1:8888` a través de `adb forward`, con un cliente `curl` durante 13 minutos. Los números los
+publica el propio proxy en `/stat?action=get_clients`, es decir, salen del analizador que corre dentro
+del hilo de lectura, no de una estimación externa.
+
+| Métrica | Valor |
+| --- | --- |
+| Paquetes TS analizados | **1.271.559** |
+| Errores de continuidad | **0** |
+| Discontinuidades de PCR | **0** |
+| Bytes sin encuadrar (`syncErrors`) | **164**, una sola vez al inicio y sin crecer después |
+| Bitrate de llegada (picos) | **8,39 Mb/s** |
+| Antigüedad del último payload | 0,2–1,8 s: la entrega es a ráfagas, no continua |
+| `stalled` | false en todo el tramo |
+
+Los 164 bytes iniciales son el desalineado del primer paquete de la sesión (el cuerpo empieza a mitad
+de paquete), no corrupción: no crecieron en 1,27 millones de paquetes. La lección para la interfaz es
+que `syncErrors` no debe leerse como «errores»; por eso la app muestra continuidad y frescura, no ese
+contador.
+
+### Dos clientes sobre un solo upstream
+
+Con un segundo cliente limitado a 100 KB/s: `active_broadcasts: 1`, `streams: 1`, `clients: 2`, uno
+con 56 MB servidos y el lento con 7 MB. El upstream no se duplicó y la continuidad siguió en 0. Al
+cerrar ambos clientes, el broadcast desaparece (`streams: []`) y el proxy sigue respondiendo `/aio`.
+
+### Memoria, CPU, hilos y sockets con el stream en curso
+
+Medido con `tools/device-check.sh footprint` (ventana de CPU de 2 s sobre `/proc/<pid>/stat`; RSS de
+`ps`, que **cuenta las páginas compartidas en cada proceso**, así que la suma es una cota superior,
+no memoria única).
+
+| Estado | App | AceServe (`libacepython.so`) | IPFS | Suma RSS | Hilos | Sockets |
+| --- | --- | --- | --- | --- | --- | --- |
+| Stream + IPFS | 112 MB, 1,0 % CPU | **299 MB, 39,5 % CPU** | 101 MB | **512 MB** | 89 | **329** (320 establecidos) |
+| Stream, IPFS parado | 115 MB, 1,5 % CPU | **270 MB, 49,5 % CPU** | — | **387 MB** | 75 | 23 (18) |
+| Stream + IPFS arrancado después | 115 MB | 284 MB, 43,5 % CPU | — | 399 MB | 75 | 23 |
+
+Dos hechos que el brief pedía y que ahora están medidos:
+
+- **IPFS es caro en esta caja**: ~100 MB de RSS, 13 hilos y ~300 conexiones establecidas de swarm.
+  Pararlo no afectó al stream en curso: los paquetes siguieron subiendo (842.129 → 875.591) y el
+  proxy no cambió de estado. Arrancarlo de nuevo tampoco.
+- **El motor es el coste dominante**: 39–50 % de un núcleo y ~280 MB de RSS mientras sirve un canal.
+  En un SoC de 4 núcleos eso es ~10–12 % del total, sostenido durante 13 minutos. No es una medida de
+  arranque: es el estado estacionario.

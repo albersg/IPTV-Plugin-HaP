@@ -38,7 +38,9 @@ sh_() { "$ADB" shell "$@" 2>/dev/null | tr -d '\r'; }
 # Every HaP-owned process: the Java app plus the native AceServe/Python and
 # kubo/IPFS children, which run as separate PIDs.
 hap_pids() {
-    sh_ "ps -A -o PID,NAME | grep -E 'com.streamvault.plugin.hap|aceserve|main_android|libipfs|ipfs' | grep -v grep" \
+    # libacepython.so is the bundled Python/AceServe engine; it does not carry "aceserve" in its
+    # process name, so the old pattern silently left it out of every RSS, socket and CPU total.
+    sh_ "ps -A -o PID,NAME | grep -E 'com.streamvault.plugin.hap|aceserve|main_android|libacepython|libipfs|ipfs' | grep -v grep" \
         | awk '{print $1}'
 }
 
@@ -111,7 +113,7 @@ cmd_footprint() {
         return
     fi
     echo "== HaP processes (PID RSS_KB NAME) =="
-    sh_ "ps -A -o PID,RSS,NAME" | awk 'NR==1 || /com.streamvault.plugin.hap|aceserve|main_android|libipfs|ipfs/'
+    sh_ "ps -A -o PID,RSS,NAME" | awk 'NR==1 || /com.streamvault.plugin.hap|aceserve|main_android|libacepython|libipfs|ipfs/'
     echo
     echo "== thread count per PID =="
     for pid in $pids; do
@@ -129,11 +131,33 @@ cmd_footprint() {
     done
     echo "$total"
     echo
-    echo "== TCP sockets owned by HaP processes =="
+    echo "== TCP/UDP sockets owned by HaP (by UID) =="
+    # /proc/<pid>/fd belongs to the app and is unreadable from the shell on Android 14, so counting
+    # `socket` symlinks there reports 0 for a process with dozens of peers. /proc/net/* is readable:
+    # count the entries whose uid column matches the package uid.
+    local uid
+    uid="$(sh_ "dumpsys package $PKG | grep -m1 -E 'userId=|appId=' | tr -d ' ' | cut -d= -f2")"
+    if [[ -z "$uid" ]]; then
+        echo "uid: unknown (package not installed?)"
+    else
+        sh_ "cat /proc/net/tcp /proc/net/tcp6 /proc/net/udp /proc/net/udp6 2>/dev/null" \
+            | awk -v uid="$uid" '$1 ~ /^[0-9]+:$/ && $8 == uid { tcp++; if ($4 != "0A") busy++ } END {
+                printf "uid %s: %d sockets (%d established/non-listening)\n", uid, tcp+0, busy+0 }'
+    fi
+    echo
+    echo "== CPU used per PID (% of one core, 2 s window) =="
+    local hz
+    hz="$(sh_ "getconf CLK_TCK")"
+    hz="${hz:-100}"
     for pid in $pids; do
-        local n
-        n="$(sh_ "ls -l /proc/$pid/fd 2>/dev/null | grep -c socket")"
-        echo "pid $pid: ${n:-0} sockets"
+        local a b
+        a="$(sh_ "awk '{print \$14+\$15}' /proc/$pid/stat")"
+        sleep 2
+        b="$(sh_ "awk '{print \$14+\$15}' /proc/$pid/stat")"
+        if [[ -n "$a" && -n "$b" ]]; then
+            awk -v a="$a" -v b="$b" -v hz="$hz" -v pid="$pid" \
+                'BEGIN { printf "pid %s: %.1f %%\n", pid, (b - a) / hz / 2.0 * 100.0 }'
+        fi
     done
 }
 

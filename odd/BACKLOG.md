@@ -8,15 +8,16 @@ baseline wins.
 
 ## 1. Verification owed on the device
 
-**V1 — Play a real channel.** The proxy answers `/aio` with 200 and a valid `#EXTM3U`, but no M3U
-source is configured on the box, so the streaming path has not been exercised since the shell was
-rewritten. This is the most important open verification, and it is also V2/V3's prerequisite.
+**V1 — Play a real channel. Done on the box**, with the signed release carrying this branch's code:
+the proxy served `ALTITUDE SPORTS *` for 13 minutes to a client through `adb forward`, 1,271,559 TS
+packets, 0 continuity errors, 0 PCR discontinuities, one 164-byte start alignment. Two clients, one of
+them limited to 100 KB/s, shared one upstream (56 MB and 7 MB served). Numbers in `docs/Measurements.md`.
+Not exercised: a player rendering it on screen (Kodi is installed but has no AceStream source).
 
-**V2 — Transport health on screen.** The app half is verified on the emulator through a host fixture
-over `adb reverse` (`tools/stat-fixture.py`): three upstreams rendered as `data 0 s ago`, `no MPEG-TS
-recognised` and `no data for 120 s`, and the block now sits above the Refresh button because below
-the client rows it fell past the last focusable control. Still owed: the same line on the box with a
-real stream, without the fixture.
+**V2 — Transport health on screen. Done.** On the box with the real stream the panel read
+`ALTITUDE SPORTS * · 8,4 Mb/s · 0 errores de continuidad · datos hace 0 s`; on the emulator the host
+fixture exercised the other two wordings (`no MPEG-TS recognised`, `no data for 120 s`). The block
+sits above the Refresh button because below the client rows it fell past the last focusable control.
 
 **V3 — BACK and focus memory, section by section.** BACK returning to Inicio is confirmed on the
 device. The per-section anchor was attempted and the test was inconclusive: activating a rail entry
@@ -57,11 +58,11 @@ description has been heard through a screen reader.
 
 ## 2. Measurements still missing
 
-`docs/Measurements.md` holds what exists (cold start 358 ms, PSS 54,857 KB, 22 threads, idle CPU,
-the guide chain, the filter on real data) and the transport probe's host throughput. Still missing:
-CPU percentage while serving, consumption with IPFS on versus off, the cost of parsing M3U and EPG,
-HTTP latency and time to first byte, `dumpsys gfxinfo` frame timings, and RSS stability over a full
-minute. One run of `tools/device-check.sh scenario` closes most of them.
+`docs/Measurements.md` now holds the big ones: cold start, idle CPU, the guide chain, the filter on
+real data, the transport probe on the host, and - new - a real 13-minute stream with CPU, RSS,
+threads and sockets, plus IPFS on versus off. Still missing: the cost of parsing M3U and EPG, HTTP
+latency and time to first byte, `dumpsys gfxinfo` frame timings, and RSS stability over a full minute
+at rest.
 
 ## 3. Code work still open
 
