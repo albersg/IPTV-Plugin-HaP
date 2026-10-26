@@ -45,11 +45,11 @@ is measured on the host and recorded in `## Log`.
 
 | ID | Task | Specs | Route | Commit |
 | --- | --- | --- | --- | --- |
-| T1 | `TsProbe` pure component and its host GoogleTest suite | S1, S2, S3 | inline (writer scope unavailable) | pending |
-| T2 | Wire the probe into `Broadcast`, `BroadcastManager`, `/status` and `/stat?action=get_clients` | S1, S3, S5 | inline | pending |
-| T3 | Show the transport line in the Conexiones section | S1, S5 | parent | pending |
-| T4 | Record the measurement and update `docs/architecture/BASELINE.md` + backlog | S3, S6 | parent | pending |
-| T5 | Full checks and work-unit commit | S6 | parent | pending |
+| T1 | `TsProbe` pure component and its host GoogleTest suite | S1, S2, S3 | inline (writer scope unavailable) | `a4932fd` |
+| T2 | Wire the probe into `Broadcast`, `BroadcastManager`, `/status` and `/stat?action=get_clients` | S1, S3, S5 | inline | `c25878f` |
+| T3 | Show the transport line in the Conexiones section | S1, S5 | parent | `3e3310f` |
+| T4 | Record the measurement and update `docs/architecture/BASELINE.md` + backlog | S3, S6 | parent | this commit |
+| T5 | Full checks and work-unit commit | S6 | parent | this commit |
 
 ## Log
 
@@ -84,3 +84,17 @@ L5 — Not verified (V2 in the backlog): the `Conexiones` line has never been se
 live stream. The parse is pinned in the JVM, the wiring compiles, and the `/status` shape is tested
 only through the probe's counters, not through an HTTP request, because the host build has no
 Android HTTP client.
+
+## Slice boundaries
+
+Three commits, because the component, the exposure and the screen are three reviewable questions:
+
+| Commit | Added lines | What a reviewer is asked to believe |
+| --- | --- | --- |
+| `a4932fd` | 761 | the probe's arithmetic, and its tests, as one indivisible unit (the test is 356 of those lines; splitting a test from the code it pins was rejected on purpose) |
+| `c25878f` | 135 | the wiring: one probe per upstream, two additive JSON keys, no changed key |
+| `3e3310f` | 409 | the app reads one answer and paints one line; the parse contract is pinned |
+
+The cumulative 1,305 lines are past the ~400-line review slice for the feature as a whole. The three
+commits are the delivery strategy: each one reverts on its own, and the third can be dropped without
+touching the server side.

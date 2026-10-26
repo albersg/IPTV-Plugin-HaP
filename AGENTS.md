@@ -10,13 +10,12 @@ Chromecast/LAN playback. It can also run as a StreamVault companion plugin
 behind the StreamVault plugin API — that integration is one consumer of HaP,
 not its primary purpose.
 
-The graphify map for this project is in `graphify-out/`:
+`docs/architecture/BASELINE.md` is the verified state of every capability
+(implemented and tested, pending validation, experimental, proposed, blocked)
+with the command or test that proves it. Read it before deciding what is
+missing; `odd/BACKLOG.md` is a working list and goes stale faster.
 
-- `graphify-out/graph.html` is the interactive graph.
-- `graphify-out/GRAPH_REPORT.md` is the audit report.
-- `graphify-out/graph.json` is the raw graph data.
-
-The highest-signal graph nodes are `HapConfigActivity`, `HapBridge`,
+The highest-signal classes are `HapConfigActivity`, `HapBridge`,
 `PlaylistCatalog`, `StreamVaultHapPluginService`, `ProxySupervisorService`,
 `AceServeRuntime`, and `IpfsRuntime`. Start there when you need architectural
 context.
@@ -48,7 +47,10 @@ context.
   Android library.
 - `app/src/main/cpp/httpaceproxycpp/` contains the C++ HTTPAceProxy core:
   Ace client protocol, HTTP server, proxy handlers, plugins, playlist
-  generation, broadcast streaming, JSON, and utilities.
+  generation, broadcast streaming, JSON, and utilities. `ts_probe.cpp` is the
+  transport-health probe: one per upstream, fed by the existing reader thread,
+  exposed as the `streams` array of `/status` and
+  `/stat?action=get_clients`.
 - `app/src/main/assets/aceserve/main_android.py` is shared; the per-ABI
   AceServe zips live in `app/src/arm64/assets/aceserve/arm64-v8a/` and
   `app/src/armv7/assets/aceserve/armeabi-v7a/` — flavor-specific source sets,
@@ -109,9 +111,18 @@ $ANDROID_HOME/platform-tools/adb shell am start \
   -p com.streamvault.plugin.hap
 ```
 
-There are currently no `app/src/test` or `app/src/androidTest` sources. For
-behavioral changes, run at least `:app:assembleUniversalDebug` and do a
-device smoke test for the affected flow.
+JVM and Robolectric tests live in `app/src/test` (240 tests; the layout tests
+drive the real views with real key events). There are no instrumented
+`androidTest` sources: anything that needs a running box is verified by script
+(`tools/device-check.sh`) and recorded in `docs/Tv-Verification-Checklist.md`.
+
+```sh
+./gradlew :app:testUniversalDebugUnitTest
+./gradlew :app:lintArmv7Debug
+```
+
+For behavioral changes, run at least `:app:assembleUniversalDebug` and the
+suites above, then do a device smoke test for the affected flow.
 
 ### Native unit tests
 
