@@ -62,9 +62,7 @@ Broadcast::Broadcast(std::string infohash, Config config, HttpClient& http_clien
       start_params_(std::move(start_params)),
       ace_(std::make_shared<AceClient>(config_, "Broadcast_" + infohash_.substr(0, 8))) {
     // Same switch as the retry: a watchdog with nothing to retry into would only shorten the
-    // session a client is watching.
-    ace_->set_silence_watchdog(
-            config_.stream_recovery_attempts > 0 ? kSilentPrebufferSeconds : 0);
+    // session a client is watching. The window is set per session in stream_loop.
     ace_->authenticate();
 }
 
@@ -167,6 +165,12 @@ void Broadcast::stream_loop() {
     std::uint64_t session_start_bytes = 0;
     for (;;) {
         session_start_bytes = bytes_total_.load(std::memory_order_relaxed);
+        // The first session gets the full window; a session a retry opened gets a short one, because a
+        // retry that starts while the network is still down can never deliver and only delays the next
+        // attempt that might.
+        ace_->set_silence_watchdog(config_.stream_recovery_attempts > 0
+                                           ? (attempt == 0 ? kSilentPrebufferSeconds : kSilentRetrySeconds)
+                                           : 0);
         try {
             auto started = ace_->start_broadcast(start_params_);
             auto url = rewrite_url_host_port(url_decode(started.url), config_.ace_host, std::to_string(config_.ace_http_port));

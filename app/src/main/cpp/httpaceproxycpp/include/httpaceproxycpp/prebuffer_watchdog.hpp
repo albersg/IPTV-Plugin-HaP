@@ -20,6 +20,17 @@ namespace httpace {
  */
 constexpr int kSilentPrebufferSeconds = 20;
 
+/**
+ * The same watchdog for a session a retry started.
+ *
+ * <p>Measured on the box with a 30 s Wi-Fi cut: a retry started while the network was still down can
+ * never deliver, and the engine does not pick the stream up when the network returns - the session has
+ * to be opened again. Waiting the full first-session window there wasted about 12 s of the client's
+ * interruption. Eight seconds is still four times the slowest healthy first byte measured (1.77 s) and
+ * lets a retry land within one cycle of the network coming back.
+ */
+constexpr int kSilentRetrySeconds = 8;
+
 /** True when an engine status line shows that the session is doing anything at all. */
 bool status_indicates_progress(const std::map<std::string, std::string>& status);
 
