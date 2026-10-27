@@ -104,8 +104,8 @@ What is still missing before it can become the default:
 - The prebuffer watchdog above: today the retry waits for the engine's own prebuffer window.
 - A comparative run against the flag off, on the same channel and time window, to show it does not make
   things worse.
-- A real Wi-Fi cut now recovers on the same client response after about 52 s for a 30 s outage
-  (measured). The remaining question is the player, not the proxy: a gap that long may make some
+- A real Wi-Fi cut now recovers on the same client response after about 41 s for a 30 s outage
+  (measured; 52 s before the retry window was shortened). The remaining question is the player, not the proxy: a gap that long may make some
   players reload even though the connection survived.
 - Source failover and engine switching remain out of scope: they need this one to be proven first.
 

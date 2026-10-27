@@ -32,6 +32,10 @@ leaving never retries.
 S6 — Observability: each broadcast counts its recoveries and `/status`/`/stat?action=get_clients`
 expose them as `recoveries`, so a comparative run does not depend on log scraping.
 
+S11 — A session a retry opened gets a shorter silence window (8 s) than the first (20 s): a retry
+started while the network is down cannot deliver, and the engine does not adopt the stream when the
+network returns, so a long window there only delays the attempt that might work.
+
 S10 — A retry opens a fresh engine API connection instead of reusing one whose engine stopped
 answering. Measured reason: after a STOP the proxy issues, `HELLOTS` and `START` time out forever on
 the old socket, so recovery after a network cut could never re-establish a session.
@@ -62,6 +66,7 @@ that session itself at ~30 s; it covers a socket that stalls without the engine 
 | R6 | Peerless no-progress watchdog in the engine reader, with ten host tests | S8 | parent | this commit |
 | R7 | Time window for one failure, with three host tests and 8 attempts when enabled | S9 | parent | this commit |
 | R8 | Fresh API connection per retry, guarded by a descriptor mutex | S10 | parent | this commit |
+| R9 | Eight-second silence window for retry sessions | S11 | parent | this commit |
 
 ## Log
 
@@ -92,6 +97,12 @@ L5 — Flag off is the shipped state: one pass through the loop, `retry_backoff_
 
 L6 — Checks: native **81/81** (7 policy tests), JVM suite green with the panel mapping updated,
 `:app:assembleUniversalDebug` and `:app:lintArmv7Debug` green, signed release installed on the box.
+
+L13 — Same cut with the shorter retry window: the read timeout ended the session at 16 s, retry 1 was
+ended by an eight-second watchdog at 08:50:33, retry 2 opened at 08:50:42 and data resumed with the
+network already back. Cut at 08:50:02, data at 08:50:43: **41 s** of interruption instead of 52 s, same
+client response, `recoveries` 2. Breakdown of what is left: 16 s for the read timeout to notice the
+stall, one retry cycle on each side of the network returning, and the ~2 s the engine needs to prebuffer.
 
 L12 — Same cut after the reconnect fix, one client, 30 s of Wi-Fi off: the read timeout ended the
 session at 16 s (retry 1/8), retry 1 reconnected and stalled with 0 peers until the watchdog ended it

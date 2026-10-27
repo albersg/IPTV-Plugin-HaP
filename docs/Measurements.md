@@ -302,4 +302,7 @@ Con la reconexión de la API por reintento, el **mismo corte** se recupera: el t
 la sesión a los 16 s, el reintento 1 reconecta y se queda sin peers, el vigilante lo cierra a los 20 s y
 el reintento 2 reconecta y entrega. Los bytes pasan de 27,3 MB a **127,9 MB** sobre la **misma respuesta
 HTTP**, `recoveries` llega a 2 y el cliente no se reconecta. La interrupción completa son ~52 s, que es
-el corte más el reintento que ya estaba en curso cuando volvió la red.
+el corte más el reintento que ya estaba en curso cuando volvió la red. Con el vigilante de 8 s para las
+sesiones de reintento, el mismo corte se recupera en **41 s** (26,2 MB → 135,3 MB, `recoveries` 2): los
+16 s que tarda el timeout de lectura en notar el parón, un ciclo de reintento a cada lado del regreso de
+la red y los ~2 s de prebuffer del motor.
