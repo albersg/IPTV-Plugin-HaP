@@ -109,6 +109,8 @@ private:
     mutable std::mutex probe_mutex_;
     TsProbe probe_;
     std::atomic<std::uint64_t> recoveries_{0};
+    /** Bytes this broadcast has carried, used to decide whether a session earned a fresh budget. */
+    std::atomic<std::uint64_t> bytes_total_{0};
 };
 
 class BroadcastManager {

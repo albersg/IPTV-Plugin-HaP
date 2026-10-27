@@ -23,6 +23,20 @@ struct RecoveryPolicy {
     std::int64_t base_backoff_ms = 500;
     /** Upper bound for any wait; 0 means "no explicit cap". */
     std::int64_t max_backoff_ms = 8000;
+    /**
+     * How long one failure may keep retrying, in milliseconds; 0 means "no time limit".
+     *
+     * <p>Measured on the box (2026-10-27): a 30 s Wi-Fi outage consumed three attempts in about 30 s
+     * and the proxy gave up seconds before the network returned. A budget of attempts alone cannot
+     * cover an outage whose length is unknown, so the window is what actually bounds a real cut.
+     */
+    std::int64_t window_ms = 90'000;
+    /**
+     * Bytes a session must deliver before a later failure gets a fresh budget.
+     *
+     * <p>Without it a stream that delivers one packet and dies would reset the window forever.
+     */
+    std::int64_t progress_bytes = 256 * 1024;
 };
 
 /**
@@ -30,7 +44,7 @@ struct RecoveryPolicy {
  *
  * @return milliseconds to wait, or 0 when no retry is allowed
  */
-std::int64_t retry_backoff_ms(const RecoveryPolicy& policy, int attempt);
+std::int64_t retry_backoff_ms(const RecoveryPolicy& policy, int attempt, std::int64_t elapsed_ms);
 
 /**
  * Read timeout for an upstream session, in seconds.

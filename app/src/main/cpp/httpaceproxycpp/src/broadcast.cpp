@@ -163,7 +163,10 @@ void Broadcast::stream_loop() {
     recovery.max_attempts = config_.stream_recovery_attempts;
     int attempt = 0;
     bool gave_up = false;
+    std::int64_t first_failure_ms = 0;
+    std::uint64_t session_start_bytes = 0;
     for (;;) {
+        session_start_bytes = bytes_total_.load(std::memory_order_relaxed);
         try {
             auto started = ace_->start_broadcast(start_params_);
             auto url = rewrite_url_host_port(url_decode(started.url), config_.ace_host, std::to_string(config_.ace_http_port));
@@ -177,8 +180,17 @@ void Broadcast::stream_loop() {
         // A reader that ended while the broadcast is still wanted and clients are still waiting is an
         // unexpected end, whatever the transport said: nothing closed it on purpose.
         const bool unexpected_end = running_.load() && client_count() > 0;
+        // A session that delivered real data earned a fresh budget for its next failure: otherwise a
+        // stream that works for an hour and then dies once would inherit an expired window.
+        const auto delivered = bytes_total_.load(std::memory_order_relaxed) - session_start_bytes;
+        if (delivered >= static_cast<std::uint64_t>(std::max<std::int64_t>(0, recovery.progress_bytes))) {
+            attempt = 0;
+            first_failure_ms = 0;
+        }
         if (!unexpected_end) break;
-        const std::int64_t wait = retry_backoff_ms(recovery, attempt + 1);
+        const std::int64_t now_ms = steady_millis();
+        if (first_failure_ms == 0) first_failure_ms = now_ms;
+        const std::int64_t wait = retry_backoff_ms(recovery, attempt + 1, now_ms - first_failure_ms);
         if (wait <= 0) {
             gave_up = true;
             break;
@@ -258,6 +270,7 @@ void Broadcast::stream_hls_url(const std::string& url) {
 
 void Broadcast::broadcast_chunk(const char* data, std::size_t size) {
     if (size == 0) return;
+    bytes_total_.fetch_add(size, std::memory_order_relaxed);
     // One probe per upstream: every client of this broadcast receives the same bytes, so
     // analysing them once says the same thing about all of them at a fraction of the cost.
     {

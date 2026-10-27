@@ -14,9 +14,10 @@ std::int64_t capped(std::int64_t value, std::int64_t cap) {
 }
 } // namespace
 
-std::int64_t retry_backoff_ms(const RecoveryPolicy& policy, int attempt) {
+std::int64_t retry_backoff_ms(const RecoveryPolicy& policy, int attempt, std::int64_t elapsed_ms) {
     if (policy.max_attempts <= 0 || attempt <= 0 || attempt > policy.max_attempts) return 0;
     if (policy.base_backoff_ms <= 0) return 0;
+    if (policy.window_ms > 0 && elapsed_ms >= policy.window_ms) return 0;
 
     // Exponential growth, stopping as soon as the cap is reached: an attempt counter that has
     // somehow grown huge must not shift the base into overflow.

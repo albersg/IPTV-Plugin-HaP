@@ -21,50 +21,50 @@ httpace::RecoveryPolicy policy(int attempts, std::int64_t base = 500, std::int64
 } // namespace
 
 TEST(RecoveryPolicy, DisabledMeansNoRetryAtAll) {
-    EXPECT_EQ(httpace::retry_backoff_ms(policy(0), 1), 0);
-    EXPECT_EQ(httpace::retry_backoff_ms(policy(-3), 1), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(policy(0), 1, 0), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(policy(-3), 1, 0), 0);
 }
 
 TEST(RecoveryPolicy, NoBackoffOutsideTheAllowedAttempts) {
     auto configured = policy(3);
-    EXPECT_EQ(httpace::retry_backoff_ms(configured, 0), 0);
-    EXPECT_EQ(httpace::retry_backoff_ms(configured, 4), 0);
-    EXPECT_EQ(httpace::retry_backoff_ms(configured, 100), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(configured, 0, 0), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(configured, 4, 0), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(configured, 100, 0), 0);
 }
 
 TEST(RecoveryPolicy, FirstWaitIsTheBasePlusBoundedJitter) {
     auto configured = policy(3);
-    std::int64_t first = httpace::retry_backoff_ms(configured, 1);
+    std::int64_t first = httpace::retry_backoff_ms(configured, 1, 0);
     EXPECT_GE(first, 500);
     EXPECT_LE(first, 750);
 }
 
 TEST(RecoveryPolicy, EachAttemptWaitsLongerAndIsDeterministic) {
     auto configured = policy(4);
-    std::int64_t first = httpace::retry_backoff_ms(configured, 1);
-    std::int64_t second = httpace::retry_backoff_ms(configured, 2);
-    std::int64_t third = httpace::retry_backoff_ms(configured, 3);
+    std::int64_t first = httpace::retry_backoff_ms(configured, 1, 0);
+    std::int64_t second = httpace::retry_backoff_ms(configured, 2, 0);
+    std::int64_t third = httpace::retry_backoff_ms(configured, 3, 0);
     EXPECT_LT(first, second);
     EXPECT_LT(second, third);
-    EXPECT_EQ(second, httpace::retry_backoff_ms(configured, 2));
+    EXPECT_EQ(second, httpace::retry_backoff_ms(configured, 2, 0));
 }
 
 TEST(RecoveryPolicy, TheCapIsNeverExceeded) {
     auto configured = policy(10, 500, 3000);
     for (int attempt = 1; attempt <= 10; attempt++) {
-        EXPECT_LE(httpace::retry_backoff_ms(configured, attempt), 3000);
+        EXPECT_LE(httpace::retry_backoff_ms(configured, attempt, 0), 3000);
     }
-    EXPECT_EQ(httpace::retry_backoff_ms(configured, 10), 3000);
+    EXPECT_EQ(httpace::retry_backoff_ms(configured, 10, 0), 3000);
 }
 
 TEST(RecoveryPolicy, HugeAttemptsDoNotOverflow) {
     auto configured = policy(10000, 500, 8000);
-    EXPECT_EQ(httpace::retry_backoff_ms(configured, 10000), 8000);
-    EXPECT_EQ(httpace::retry_backoff_ms(configured, 2000000000), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(configured, 10000, 0), 8000);
+    EXPECT_EQ(httpace::retry_backoff_ms(configured, 2000000000, 0), 0);
 }
 
 TEST(RecoveryPolicy, AZeroBaseStillWaitsNothing) {
-    EXPECT_EQ(httpace::retry_backoff_ms(policy(3, 0, 8000), 1), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(policy(3, 0, 8000), 1, 0), 0);
 }
 
 TEST(RecoveryReadTimeout, disabledKeepsTheConfiguredTimeout) {
@@ -89,4 +89,25 @@ TEST(RecoveryReadTimeout, zeroKeepsItsNoTimeoutMeaning) {
     httpace::RecoveryPolicy policy;
     policy.max_attempts = 3;
     EXPECT_EQ(upstream_read_timeout_seconds(policy, 0), 0);
+}
+
+TEST(RecoveryWindow, anOutageLongerThanTheWindowStopsTheRetries) {
+    auto configured = policy(8);
+    configured.window_ms = 90'000;
+    EXPECT_GT(httpace::retry_backoff_ms(configured, 1, 89'999), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(configured, 1, 90'000), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(configured, 1, 120'000), 0);
+}
+
+TEST(RecoveryWindow, zeroMeansNoTimeLimit) {
+    auto configured = policy(8);
+    configured.window_ms = 0;
+    EXPECT_GT(httpace::retry_backoff_ms(configured, 1, 10'000'000), 0);
+}
+
+TEST(RecoveryWindow, theAttemptCapStillAppliesInsideTheWindow) {
+    auto configured = policy(3);
+    configured.window_ms = 90'000;
+    EXPECT_GT(httpace::retry_backoff_ms(configured, 3, 1'000), 0);
+    EXPECT_EQ(httpace::retry_backoff_ms(configured, 4, 1'000), 0);
 }

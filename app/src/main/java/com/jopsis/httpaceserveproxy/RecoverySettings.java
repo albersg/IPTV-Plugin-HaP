@@ -15,7 +15,7 @@ public final class RecoverySettings {
     private static final String KEY_ENABLED = "stream_recovery_enabled";
 
     /** Retries per upstream when the switch is on: enough to ride out a re-announce, few enough to give up. */
-    public static final int ATTEMPTS_WHEN_ENABLED = 3;
+    public static final int ATTEMPTS_WHEN_ENABLED = 8;
 
     private RecoverySettings() {
     }
