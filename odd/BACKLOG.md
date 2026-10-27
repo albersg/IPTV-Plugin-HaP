@@ -82,6 +82,7 @@ at rest.
 | — | D-pad row order outside `Conexiones` | The fix is global (`FocusRows`), verified on `Conexiones`, `Inicio` and the rail; no other section had a two-column composition to exercise it, so a walk of `Fuentes` and `Ajustes` on the box is still owed |
 | ~~Prebuffer watchdog~~ | Implemented behind the recovery switch: 20 s of no progress **and no peers** in a prebuffer state ends the session so the retry can run. Measured: fires 20 s after the session starts, leaves a healthy channel alone (`recoveries 0`), and closes a dead channel's client at 30 s instead of 80 s. Limits written in `odd/tasks/hap-stream-recovery.md`: a peerless channel slower than 20 s would be retried instead of waited for, and the retries after a forced stop burn in ~6 s |
 | — | Vendor AceStream app on the same box | Measured: with `org.acestream.node.web` running, HaP's server start fails ("El servidor tiene un problema") because the vendor app holds the engine; force-stopping it made the same build start. A real coexistence note for the UI or the docs, not yet handled |
+| — | Engine API session dies after a forced STOP | Measured with a real Wi-Fi cut: after the proxy stops a session itself, `HELLOTS` and `START` never answer again, so retries cannot re-establish (a natural end does work). Fix: reconnect the API client or hand the broadcast a fresh one. Until then, recovery after a network cut depends on the engine ending the session, not on the proxy's own stop |
 | — | IPFS is on but not running | Observed while restoring the box: after a cold start with the server stopped, the IPFS switch read on while the panel said `Parado` and no `libipfs.so` ran; toggling it off and on started it. Either it should start with the preference or the switch should follow the process, but the two must not disagree |
 | — | Rail escape from a right-edge control | On the box, LEFT from a switch at the right edge does not reach the rail and BACK from Inicio content leaves the activity, so the reliable way back to the rail is a cold start. Not necessarily wrong (BACK from other sections goes home), but the walk should not assume LEFT escapes |
 | — | Branch hygiene | The branch carries roughly 14,000 authored lines across 38 commits and long passed the ~400-line review slice. History will not be rewritten this late; a proper review needs chained PRs by area |
@@ -90,8 +91,8 @@ at rest.
 
 A bounded retry of the same upstream now exists behind a switch that ships off
 (`odd/tasks/hap-stream-recovery.md`): when the reader ends while clients are still waiting, the source
-is reopened at most 3 times with exponential backoff, and each broadcast counts its `recoveries` in
-`/status`. It recovered a real cold channel on the box after two attempts (368,083 packets after the
+is reopened up to 8 times within a 90 s window with exponential backoff, and each broadcast counts its
+`recoveries` in `/status`. It recovered a real cold channel on the box after two attempts (368,083 packets after the
 retry) and does not touch a healthy stream.
 
 What is still missing before it can become the default:

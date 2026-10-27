@@ -32,6 +32,10 @@ leaving never retries.
 S6 — Observability: each broadcast counts its recoveries and `/status`/`/stat?action=get_clients`
 expose them as `recoveries`, so a comparative run does not depend on log scraping.
 
+S9 — One failure is bounded by time as well as by attempts: up to 90 s and 8 attempts, whichever ends
+first, with a fresh budget only after a session that delivered at least 256 KiB. Measured reason: a
+30 s Wi-Fi cut used up three attempts in 30 s and the proxy gave up just before the network returned.
+
 S8 — A session that the engine accepts, that reports no peers and shows no progress for 20 s is
 ended so the retry can run; a session with peers is left to the engine's own window, because retrying
 a slow swarm restarts its prebuffer. Both live behind the recovery switch, so nothing changes with it
@@ -52,6 +56,7 @@ that session itself at ~30 s; it covers a socket that stalls without the engine 
 | R4 | Box run with the flag on: cold channel recovers, live channel does not falsely retry | S1, S5, S6 | parent | this commit |
 | R5 | Read timeout shortened while recovery is on, with four host tests | S7 | parent | this commit |
 | R6 | Peerless no-progress watchdog in the engine reader, with ten host tests | S8 | parent | this commit |
+| R7 | Time window for one failure, with three host tests and 8 attempts when enabled | S9 | parent | this commit |
 
 ## Log
 
@@ -82,6 +87,16 @@ L5 — Flag off is the shipped state: one pass through the loop, `retry_backoff_
 
 L6 — Checks: native **81/81** (7 policy tests), JVM suite green with the panel mapping updated,
 `:app:assembleUniversalDebug` and `:app:lintArmv7Debug` green, signed release installed on the box.
+
+L11 — Wi-Fi cut on the box, 2026-10-27, flag on, one client streaming (25.2 MB served). The cut froze
+the bytes; the read timeout ended the session 16 s later (retry 1/8), retry 2 got a new stream URL and
+zero bytes, and the watchdog ended retry 2 at 20 s. The network came back at +30 s, but retries 3-8
+could not run: `re-auth failed: Engine response timeout waiting for HELLOTS` and
+`stream failed: Engine response timeout waiting for START`. The engine API socket stops answering after
+a forced STOP, so **a retry can re-establish a session only after a natural end, not after a stop the
+proxy issued**. The client stayed connected through all 67 s and was dropped at the give-up. That is the
+next defect to fix (reconnect the API client, or hand the broadcast a fresh one); the window itself did
+its job.
 
 L10 — Watchdog on the box, 2026-10-27, flag on. Dead channel (`DAZN Baloncesto 1080p **`, 0 peers):
 `WARNING [Broadcast_d0924804] no engine progress for 20 s; ending the session so the retry can run`

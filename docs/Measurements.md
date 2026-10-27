@@ -281,3 +281,20 @@ primer reintento llegaba tras **~30 s**, porque quien cerraba la sesión era el 
 de progreso cero (20 s, solo sin peers) el aviso aparece **23 s después de la petición** — la sesión
 empieza ~3 s después — y el cliente se cierra a los **30,5 s** en vez de esperar 80 s. El mismo día, el
 canal sano: primer byte 1,77 s, 25 MB en 26 s, **recoveries 0** y ninguna línea del vigilante.
+
+## Corte de red real, con un cliente (2026-10-27)
+
+Stream sano (`ALTITUDE SPORTS *`) con un cliente `curl`; se apaga el Wi-Fi de la caja 25 s después de
+empezar y se vuelve a encender 30 s más tarde:
+
+| Momento | Clientes | Bytes servidos | recoveries |
+| --- | --- | --- | --- |
+| Antes del corte | 1 | 25.163.520 | 0 |
+| Corte +20 s | 1 | 25.163.520 | 2 |
+| Red de vuelta +15 s | 1 | 25.163.520 | 4 |
+| Red de vuelta +60 s (antes del abandono) | 1 | 25.163.520 | 8 |
+
+El cliente **no se desconecta** durante 67 s: el proxy mantiene su respuesta HTTP abierta mientras
+reintenta. Lo que falla es el reenganche: tras un `STOP` que emite el propio proxy, el motor deja de
+responder en la API (`HELLOTS`/`START` sin respuesta), así que los reintentos 3-8 no llegan a abrir
+sesión. Con la ventana anterior (3 intentos) el abandono llegaba a los 30 s; ahora llega a los 67 s.
