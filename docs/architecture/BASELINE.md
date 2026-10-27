@@ -14,7 +14,7 @@ the code or the command that proves it.
 
 | What | Command or file | Result |
 | --- | --- | --- |
-| JVM + Robolectric suite | `./gradlew :app:testUniversalDebugUnitTest` | **254 tests, 0 failures**, 29 files |
+| JVM + Robolectric suite | `./gradlew :app:testUniversalDebugUnitTest` | **259 tests, 0 failures**, 30 files |
 | Native suite | `cmake -S native-tests -B build/native-tests && ctest --test-dir build/native-tests` | **109 tests, 0 failures** |
 | APK | `./gradlew :app:assembleUniversalDebug` | green, both ABIs |
 | Lint | `./gradlew :app:lintArmv7Debug` | green, 0 errors (133 warnings, none new-blocking) |
@@ -42,6 +42,7 @@ this repository; the code areas it lists are still accurate.
 | Playback state per upstream (`starting`…`failed`) and session generation | `playback_state.cpp`, 9 host tests, `TransportStatusTest`; box: live `playing`/gen 1, dead `prebuffering`→`recovering`/gen 2-5 |
 | Transport health: per-upstream continuity, PCR, resync, arrival rate, stall | `ts_probe.cpp`, 16 `TsProbe` tests, `TransportStatusTest`; measured below |
 | IPFS: bundled kubo on its own supervisor thread, LAN switch tied to `ProxyExposure` | `IpfsRuntime`, `IpfsSettings`, `HapServiceStatesTest` |
+| IPFS state and intent agree | `IpfsStartPolicy` (5 units): the badge says "starting" only while the supervisor starts it, and a preference that is on makes the app ask for a start once per launch; box: cold start with the server stopped brought it up in ~6 s |
 | StreamVault companion service: **closed to other apps** | `AndroidManifest.xml` (`android:exported="false"`), reopening comment in place |
 | TalkBack can name every control | `ControlLabelsTest` (every `Switch` carries its row label); `tools/a11y-audit.py` over `tools/tv-audit.sh` on the box: 6 sections × 11 D-pad positions, then 6 × 4 on the final build, **0 focusable nodes without a name** each time, with a negative control |
 | Channel list without the server | Canales fills itself from the playlist files when it opens with nothing rendered; verified on the box (`lista-unificada.m3u (388)` with the server stopped) |

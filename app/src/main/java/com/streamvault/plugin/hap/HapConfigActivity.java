@@ -276,6 +276,8 @@ public class HapConfigActivity extends Activity {
     private List<HapBridge.CustomChannelInfo> currentCustomChannels = new ArrayList<>();
     private List<HapBridge.PluginChannelsInfo> channelPlugins = new ArrayList<>();
     private boolean channelLoadPending;
+    /** One launch request per activity: a gateway that failed is not retried on every refresh. */
+    private boolean ipfsLaunchStartRequested;
     private String editingM3uSourceId = "";
     private String selectedPluginId;
     private String selectedChannelContentId;
@@ -2740,6 +2742,9 @@ public class HapConfigActivity extends Activity {
         snapshot.externalPlayerServerEnabled = status.externalPlayerServerEnabled;
         snapshot.lanModeEnabled = status.serverModeEnabled;
         snapshot.ipfsEnabled = status.ipfsEnabled;
+        snapshot.ipfsRunning = status.ipfsRunning;
+        snapshot.ipfsPhase = status.ipfsPhase;
+        snapshot.ipfsPublicError = status.ipfsError;
 
         RuntimeBadge ipfs = ipfsBadge(status);
         snapshot.ipfsLabel = ipfs.label;
@@ -2787,6 +2792,15 @@ public class HapConfigActivity extends Activity {
         ipfsStatePill.apply(snapshot.ipfsLabel, snapshot.ipfsBackgroundColor, snapshot.ipfsTextColor);
         applyCaption(ipfsErrorView, snapshot.ipfsErrorText);
         applyIpfsGateway(snapshot.ipfsGatewayUrl);
+
+        // The preference is the intent: with the switch on, a gateway that is not running after a cold
+        // start is started once, so the panel and the process cannot disagree for a whole session.
+        if (!ipfsLaunchStartRequested && !destroyed
+                && IpfsStartPolicy.shouldStartOnLaunch(snapshot.ipfsEnabled, snapshot.ipfsRunning,
+                        snapshot.ipfsPhase, snapshot.ipfsPublicError)) {
+            ipfsLaunchStartRequested = true;
+            HapBridge.setIpfsEnabled(this, true);
+        }
 
         // The endpoint list decides for itself whether the rows changed, so an unchanged tick
         // performs no view work at all.
@@ -2851,7 +2865,9 @@ public class HapConfigActivity extends Activity {
         if (status.ipfsRunning) {
             return new RuntimeBadge(getString(R.string.status_ipfs_online), COLOR_SUCCESS_MUTED, COLOR_SUCCESS);
         }
-        if (status.ipfsEnabled) {
+        // "Starting" only while the supervisor is actually starting it. After a cold start the phase is
+        // empty and the preference can still be on, which used to read as "starting" forever.
+        if (IpfsStartPolicy.isStarting(status.ipfsEnabled, status.ipfsRunning, status.ipfsPhase)) {
             return new RuntimeBadge(getString(R.string.status_ipfs_starting), COLOR_WARNING_MUTED, COLOR_WARNING);
         }
         return new RuntimeBadge(getString(R.string.status_ipfs_offline), COLOR_ERROR_MUTED, COLOR_ERROR);
@@ -4655,6 +4671,9 @@ public class HapConfigActivity extends Activity {
         boolean externalPlayerServerEnabled;
         boolean lanModeEnabled;
         boolean ipfsEnabled;
+        boolean ipfsRunning;
+        String ipfsPhase;
+        String ipfsPublicError;
         String ipfsLabel;
         int ipfsBackgroundColor;
         int ipfsTextColor;
