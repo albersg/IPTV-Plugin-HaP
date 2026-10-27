@@ -14,8 +14,8 @@ the code or the command that proves it.
 
 | What | Command or file | Result |
 | --- | --- | --- |
-| JVM + Robolectric suite | `./gradlew :app:testUniversalDebugUnitTest` | **253 tests, 0 failures**, 29 files |
-| Native suite | `cmake -S native-tests -B build/native-tests && ctest --test-dir build/native-tests` | **100 tests, 0 failures** |
+| JVM + Robolectric suite | `./gradlew :app:testUniversalDebugUnitTest` | **254 tests, 0 failures**, 29 files |
+| Native suite | `cmake -S native-tests -B build/native-tests && ctest --test-dir build/native-tests` | **109 tests, 0 failures** |
 | APK | `./gradlew :app:assembleUniversalDebug` | green, both ABIs |
 | Lint | `./gradlew :app:lintArmv7Debug` | green, 0 errors (133 warnings, none new-blocking) |
 | CI | `.github/workflows/native-tests.yml`, `build-apk.yml` | ctest + lint + release build; release requires the signing secrets |
@@ -39,6 +39,7 @@ this repository; the code areas it lists are still accurate.
 | Updater: GitHub Releases, signature check, install receiver | `UpdateCoreTest`; v1.4.1 validated end to end on the box |
 | Privacy: explicit-stop wipe, log redaction, capped engine log | `StopWipeTest`, `LogRedactionTest` |
 | Security: peer checks capped at 2, chunk-size bound, control-byte rejection, CORS on credentialed endpoints, real peer address | `test_util.cpp`, `test_chunk_parser.cpp`, `proxy.cpp` |
+| Playback state per upstream (`starting`…`failed`) and session generation | `playback_state.cpp`, 9 host tests, `TransportStatusTest`; box: live `playing`/gen 1, dead `prebuffering`→`recovering`/gen 2-5 |
 | Transport health: per-upstream continuity, PCR, resync, arrival rate, stall | `ts_probe.cpp`, 16 `TsProbe` tests, `TransportStatusTest`; measured below |
 | IPFS: bundled kubo on its own supervisor thread, LAN switch tied to `ProxyExposure` | `IpfsRuntime`, `IpfsSettings`, `HapServiceStatesTest` |
 | StreamVault companion service: **closed to other apps** | `AndroidManifest.xml` (`android:exported="false"`), reopening comment in place |
@@ -75,10 +76,12 @@ part of the product surface.
 
 Ordered by the sequence in which they reduce risk, not by novelty.
 
-1. **PlaybackCoordinator**: an explicit state machine (`IDLE`, `STARTING`, `PREBUFFERING`, `PLAYING`,
-   `DEGRADED`, `RECOVERING`, `SWITCHING_SOURCE`, `SWITCHING_ENGINE`, `FAILED`, `STOPPING`) with
-   session generations, budgets and bounded retries. The transport counters above are its first
-   input; nothing consumes them for decisions yet.
+1. **PlaybackCoordinator**: the observational half is in place - one state per upstream
+   (`starting`, `prebuffering`, `playing`, `degraded`, `recovering`, `failed`) plus a session
+   generation, published in `/status` and pinned by `test_playback_state.cpp`, with box evidence in
+   `odd/tasks/hap-playback-coordinator.md`. What remains is the deciding half: budgets, the
+   `switching_source`/`switching_engine` states, and moving the retry and watchdog decisions onto it,
+   which needs a comparative run first.
 2. **Engine capability layer**: `AceServeEngineAdapter` first, a capability description (HLS, TS,
    seek, metrics, encryption) instead of forcing every engine to fake every method.
 3. **Outpace adapter**: external engine on PC/NAS first. See the blocked note.

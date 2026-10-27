@@ -109,7 +109,18 @@ What is still missing before it can become the default:
   players reload even though the connection survived.
 - Source failover and engine switching remain out of scope: they need this one to be proven first.
 
-## 5. Fast start, measured and not tuned
+## 5. Playback state (observation only)
+
+The proxy now names one state per upstream (`starting`, `prebuffering`, `playing`, `degraded`,
+`recovering`, `failed`) and a session generation, and publishes both in `/status`; see
+`odd/tasks/hap-playback-coordinator.md`. Nothing decides on it yet. Before the deciding half:
+
+- A comparative run of the retry decisions against today's thresholds, so a state-driven decision can
+  be shown to be better rather than just tidier.
+- The states that need a source or engine switch (`switching_source`, `switching_engine`) stay out
+  until those exist.
+
+## 6. Fast start, measured and not tuned
 
 Cold start per channel on the box, six channels, server freshly started: time to first byte **0.98,
 1.21, 1.34, 1.39, 1.40 and 1.73 s**; `/aio` (388 channels, 42 KB) 8.6-17.6 ms and `/stat` 4.6-11.5 ms.
@@ -123,7 +134,7 @@ Consequences recorded rather than features added:
   within the window, at the cost of keeping an engine session (39-50 % of a core, ~280 MB) alive for a
   channel nobody is watching. Not worth it; the source is the engine, not the proxy.
 
-## 6. Decisions recorded, with their revisit triggers
+## 7. Decisions recorded, with their revisit triggers
 
 - **Stay on Java and Android Views.** No Compose. Large lists now have device-adjacent proof
   (RecyclerView + units) but not a device walk; playback remains unverified, so the decision stays
@@ -136,7 +147,7 @@ Consequences recorded rather than features added:
   proxy is loopback-only as intended, but the engine listens on `0.0.0.0` at 6878, 62062, 8621 and
   its peer port, with or without `--bind-all`.
 
-## 7. Resolved, kept so they are not reopened
+## 8. Resolved, kept so they are not reopened
 
 - **D1 — exported StreamVault service.** Closed: `StreamVaultHapPluginService` is
   `android:exported="false"`. The manifest keeps the exact one-line reopening instructions for when

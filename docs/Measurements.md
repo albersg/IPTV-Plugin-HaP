@@ -306,3 +306,15 @@ el corte más el reintento que ya estaba en curso cuando volvió la red. Con el 
 sesiones de reintento, el mismo corte se recupera en **41 s** (26,2 MB → 135,3 MB, `recoveries` 2): los
 16 s que tarda el timeout de lectura en notar el parón, un ciclo de reintento a cada lado del regreso de
 la red y los ~2 s de prebuffer del motor.
+
+## Estado por upstream, en la caja (2026-10-27)
+
+Con la recuperación encendida, `/stat?action=get_clients` publica ahora `state` y `generation`:
+
+| Canal | Muestreo | Resultado |
+| --- | --- | --- |
+| `ALTITUDE SPORTS *` (sano) | 10 s | `state=playing`, `generation=1`, `recoveries=0`, 78.077 paquetes |
+| `DAZN Baloncesto 1080p **` (muerto) | cada 10 s | `prebuffering` (gen 1) 20 s, luego `recovering` con gen 2, 3, 4, 5 y `recoveries` 1→4 |
+
+Son hechos de transporte, no de imagen: «playing» significa que fluyen bytes por el transporte, no que
+el reproductor esté pintando.
