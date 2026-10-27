@@ -295,6 +295,11 @@ empezar y se vuelve a encender 30 s más tarde:
 | Red de vuelta +60 s (antes del abandono) | 1 | 25.163.520 | 8 |
 
 El cliente **no se desconecta** durante 67 s: el proxy mantiene su respuesta HTTP abierta mientras
-reintenta. Lo que falla es el reenganche: tras un `STOP` que emite el propio proxy, el motor deja de
-responder en la API (`HELLOTS`/`START` sin respuesta), así que los reintentos 3-8 no llegan a abrir
-sesión. Con la ventana anterior (3 intentos) el abandono llegaba a los 30 s; ahora llega a los 67 s.
+reintenta. En esa primera pasada los reintentos 3-8 no llegaban a abrir sesión porque, tras un `STOP`
+del propio proxy, el motor dejaba de responder en la API (`HELLOTS`/`START` sin respuesta).
+
+Con la reconexión de la API por reintento, el **mismo corte** se recupera: el timeout de lectura cierra
+la sesión a los 16 s, el reintento 1 reconecta y se queda sin peers, el vigilante lo cierra a los 20 s y
+el reintento 2 reconecta y entrega. Los bytes pasan de 27,3 MB a **127,9 MB** sobre la **misma respuesta
+HTTP**, `recoveries` llega a 2 y el cliente no se reconecta. La interrupción completa son ~52 s, que es
+el corte más el reintento que ya estaba en curso cuando volvió la red.

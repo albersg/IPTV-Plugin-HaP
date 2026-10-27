@@ -32,6 +32,10 @@ leaving never retries.
 S6 — Observability: each broadcast counts its recoveries and `/status`/`/stat?action=get_clients`
 expose them as `recoveries`, so a comparative run does not depend on log scraping.
 
+S10 — A retry opens a fresh engine API connection instead of reusing one whose engine stopped
+answering. Measured reason: after a STOP the proxy issues, `HELLOTS` and `START` time out forever on
+the old socket, so recovery after a network cut could never re-establish a session.
+
 S9 — One failure is bounded by time as well as by attempts: up to 90 s and 8 attempts, whichever ends
 first, with a fresh budget only after a session that delivered at least 256 KiB. Measured reason: a
 30 s Wi-Fi cut used up three attempts in 30 s and the proxy gave up just before the network returned.
@@ -57,6 +61,7 @@ that session itself at ~30 s; it covers a socket that stalls without the engine 
 | R5 | Read timeout shortened while recovery is on, with four host tests | S7 | parent | this commit |
 | R6 | Peerless no-progress watchdog in the engine reader, with ten host tests | S8 | parent | this commit |
 | R7 | Time window for one failure, with three host tests and 8 attempts when enabled | S9 | parent | this commit |
+| R8 | Fresh API connection per retry, guarded by a descriptor mutex | S10 | parent | this commit |
 
 ## Log
 
@@ -87,6 +92,13 @@ L5 — Flag off is the shipped state: one pass through the loop, `retry_backoff_
 
 L6 — Checks: native **81/81** (7 policy tests), JVM suite green with the panel mapping updated,
 `:app:assembleUniversalDebug` and `:app:lintArmv7Debug` green, signed release installed on the box.
+
+L12 — Same cut after the reconnect fix, one client, 30 s of Wi-Fi off: the read timeout ended the
+session at 16 s (retry 1/8), retry 1 reconnected and stalled with 0 peers until the watchdog ended it
+at 20 s, retry 2/8 reconnected and delivered once the network was back. Bytes went from 27.3 MB to
+127.9 MB over the same HTTP response, `recoveries` reached 2, and the client never reconnected. The
+whole interruption cost about 52 s, which is the outage plus the retry that was already running when
+the network returned.
 
 L11 — Wi-Fi cut on the box, 2026-10-27, flag on, one client streaming (25.2 MB served). The cut froze
 the bytes; the read timeout ended the session 16 s later (retry 1/8), retry 2 got a new stream URL and

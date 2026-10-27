@@ -82,7 +82,7 @@ at rest.
 | — | D-pad row order outside `Conexiones` | The fix is global (`FocusRows`), verified on `Conexiones`, `Inicio` and the rail; no other section had a two-column composition to exercise it, so a walk of `Fuentes` and `Ajustes` on the box is still owed |
 | ~~Prebuffer watchdog~~ | Implemented behind the recovery switch: 20 s of no progress **and no peers** in a prebuffer state ends the session so the retry can run. Measured: fires 20 s after the session starts, leaves a healthy channel alone (`recoveries 0`), and closes a dead channel's client at 30 s instead of 80 s. Limits written in `odd/tasks/hap-stream-recovery.md`: a peerless channel slower than 20 s would be retried instead of waited for, and the retries after a forced stop burn in ~6 s |
 | — | Vendor AceStream app on the same box | Measured: with `org.acestream.node.web` running, HaP's server start fails ("El servidor tiene un problema") because the vendor app holds the engine; force-stopping it made the same build start. A real coexistence note for the UI or the docs, not yet handled |
-| — | Engine API session dies after a forced STOP | Measured with a real Wi-Fi cut: after the proxy stops a session itself, `HELLOTS` and `START` never answer again, so retries cannot re-establish (a natural end does work). Fix: reconnect the API client or hand the broadcast a fresh one. Until then, recovery after a network cut depends on the engine ending the session, not on the proxy's own stop |
+| ~~Engine API session dies after a forced STOP~~ | Fixed: a retry opens a fresh API connection (`AceClient::reconnect`). Measured with the same Wi-Fi cut: the stream resumed on retry 2 over the same client response (27.3 MB → 127.9 MB, `recoveries` 2) |
 | — | IPFS is on but not running | Observed while restoring the box: after a cold start with the server stopped, the IPFS switch read on while the panel said `Parado` and no `libipfs.so` ran; toggling it off and on started it. Either it should start with the preference or the switch should follow the process, but the two must not disagree |
 | — | Rail escape from a right-edge control | On the box, LEFT from a switch at the right edge does not reach the rail and BACK from Inicio content leaves the activity, so the reliable way back to the rail is a cold start. Not necessarily wrong (BACK from other sections goes home), but the walk should not assume LEFT escapes |
 | — | Branch hygiene | The branch carries roughly 14,000 authored lines across 38 commits and long passed the ~400-line review slice. History will not be rewritten this late; a proper review needs chained PRs by area |
@@ -104,6 +104,9 @@ What is still missing before it can become the default:
 - The prebuffer watchdog above: today the retry waits for the engine's own prebuffer window.
 - A comparative run against the flag off, on the same channel and time window, to show it does not make
   things worse.
+- A real Wi-Fi cut now recovers on the same client response after about 52 s for a 30 s outage
+  (measured). The remaining question is the player, not the proxy: a gap that long may make some
+  players reload even though the connection survived.
 - Source failover and engine switching remain out of scope: they need this one to be proven first.
 
 ## 5. Fast start, measured and not tuned
