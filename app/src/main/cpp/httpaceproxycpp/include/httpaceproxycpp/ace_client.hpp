@@ -63,6 +63,9 @@ public:
      */
     void reconnect();
 
+    /** True when the engine's last status said it is prebuffering. */
+    bool prebuffering() const { return prebuffering_.load(); }
+
 private:
     void connect_socket();
     void reader_loop();

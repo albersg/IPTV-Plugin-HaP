@@ -3,6 +3,7 @@
 #include "httpaceproxycpp/ace_client.hpp"
 #include "httpaceproxycpp/config.hpp"
 #include "httpaceproxycpp/http_client.hpp"
+#include "httpaceproxycpp/playback_state.hpp"
 #include "httpaceproxycpp/recovery_policy.hpp"
 #include "httpaceproxycpp/ts_probe.hpp"
 
@@ -87,6 +88,11 @@ public:
     // How many times this upstream was reopened after its reader ended while clients waited.
     std::uint64_t recoveries() const { return recoveries_.load(std::memory_order_relaxed); }
 
+    /** What the proxy can say about this upstream right now; observation only, no decision reads it. */
+    PlaybackState state() const;
+    /** 1 for the first session, plus one per retry. */
+    int generation() const { return static_cast<int>(recoveries_.load(std::memory_order_relaxed)) + 1; }
+
 private:
     void stream_loop();
     // Sleeps the backoff in small steps so a stop or the last client leaving is noticed promptly.
@@ -111,6 +117,8 @@ private:
     std::atomic<std::uint64_t> recoveries_{0};
     /** Bytes this broadcast has carried, used to decide whether a session earned a fresh budget. */
     std::atomic<std::uint64_t> bytes_total_{0};
+    std::atomic<bool> session_has_payload_{false};
+    std::atomic<bool> gave_up_{false};
 };
 
 class BroadcastManager {
@@ -132,6 +140,8 @@ public:
         std::size_t clients = 0;
         std::uint64_t bytes_sent = 0;
         std::uint64_t recoveries = 0;
+        PlaybackState state = PlaybackState::Starting;
+        int generation = 1;
         TsProbe::Counters counters;
     };
     std::vector<StreamTransport> stream_transports() const;

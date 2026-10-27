@@ -459,6 +459,8 @@ Json Proxy::streams_json() {
             {"pcrDiscontinuities", static_cast<double>(counters.pcr_discontinuities)},
             {"lastPayloadAgeMs", static_cast<double>(counters.last_payload_age_ms)},
             {"recoveries", static_cast<double>(entry.recoveries)},
+            {"state", playback_state_name(entry.state)},
+            {"generation", static_cast<double>(entry.generation)},
             {"stalled", counters.stalled},
             {"synchronized", counters.synchronized}
         });

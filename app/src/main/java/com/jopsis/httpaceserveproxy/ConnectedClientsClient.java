@@ -68,7 +68,9 @@ final class ConnectedClientsClient {
                         Math.max(0L, item.optLong("syncErrors", 0)),
                         item.optLong("lastPayloadAgeMs", -1),
                         item.optBoolean("stalled", false),
-                        item.optBoolean("synchronized", false)));
+                        item.optBoolean("synchronized", false),
+                        item.optString("state", ""),
+                        item.optInt("generation", 1)));
             }
         }
         return new Snapshot(out, transports);
@@ -143,9 +145,14 @@ final class ConnectedClientsClient {
         final long lastPayloadAgeMs;
         final boolean stalled;
         final boolean synced;
+        /** The proxy's own state name, empty when an older proxy did not send one. */
+        final String state;
+        /** 1 for the first session, plus one per retry. */
+        final int generation;
 
         Transport(String channel, int clients, double bitrateBps, long continuityErrors,
-                  long syncErrors, long lastPayloadAgeMs, boolean stalled, boolean synced) {
+                  long syncErrors, long lastPayloadAgeMs, boolean stalled, boolean synced,
+                  String state, int generation) {
             this.channel = channel;
             this.clients = clients;
             this.bitrateBps = bitrateBps;
@@ -154,6 +161,8 @@ final class ConnectedClientsClient {
             this.lastPayloadAgeMs = lastPayloadAgeMs;
             this.stalled = stalled;
             this.synced = synced;
+            this.state = state;
+            this.generation = generation;
         }
 
         /** Arrival rate in megabits per second, the unit an operator reads. */

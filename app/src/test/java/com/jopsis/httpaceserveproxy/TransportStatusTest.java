@@ -47,7 +47,9 @@ public class TransportStatusTest {
             + "\"pcrDiscontinuities\":1,"
             + "\"lastPayloadAgeMs\":240,"
             + "\"stalled\":false,"
-            + "\"synchronized\":true"
+            + "\"synchronized\":true,"
+            + "\"state\":\"playing\","
+            + "\"generation\":2"
             + "}]"
             + "}";
 
@@ -69,6 +71,17 @@ public class TransportStatusTest {
         assertEquals(240, transport.lastPayloadAgeMs);
         assertFalse(transport.stalled);
         assertTrue(transport.synced);
+        assertEquals("playing", transport.state);
+        assertEquals(2, transport.generation);
+    }
+
+    @Test
+    public void anOlderProxyWithoutStateIsNotGuessed() throws Exception {
+        String withoutState = ANSWER.replace(",\"state\":\"playing\",\"generation\":2", "");
+        ConnectedClientsClient.Transport transport =
+                ConnectedClientsClient.parse(withoutState).transports.get(0);
+        assertEquals("", transport.state);
+        assertEquals(1, transport.generation);
     }
 
     @Test

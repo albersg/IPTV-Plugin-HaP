@@ -118,6 +118,16 @@ std::vector<std::shared_ptr<StreamClient>> Broadcast::clients() const {
     return out;
 }
 
+PlaybackState Broadcast::state() const {
+    PlaybackFacts facts;
+    facts.gave_up = gave_up_.load(std::memory_order_relaxed);
+    facts.retrying = recoveries_.load(std::memory_order_relaxed) > 0;
+    facts.engine_prebuffering = ace_ && ace_->prebuffering();
+    facts.has_payload = session_has_payload_.load(std::memory_order_relaxed);
+    facts.stalled = transport().stalled;
+    return classify_playback_state(facts);
+}
+
 void Broadcast::start_once() {
     bool expected = false;
     if (started_.compare_exchange_strong(expected, true)) {
@@ -165,6 +175,7 @@ void Broadcast::stream_loop() {
     std::uint64_t session_start_bytes = 0;
     for (;;) {
         session_start_bytes = bytes_total_.load(std::memory_order_relaxed);
+        session_has_payload_ = false;
         // The first session gets the full window; a session a retry opened gets a short one, because a
         // retry that starts while the network is still down can never deliver and only delays the next
         // attempt that might.
@@ -224,6 +235,7 @@ void Broadcast::stream_loop() {
     // With recovery disabled there is nothing to give up: the session ended and that is the whole
     // story. Logging "giving up after 0 retries" there would blame a policy that was never asked.
     if (gave_up && running_.load() && recovery.max_attempts > 0) {
+        gave_up_ = true;
         log_line("ERROR", "[" + infohash_.substr(0, 8) + "] giving up after "
                 + std::to_string(recovery.max_attempts) + " retries");
     }
@@ -277,6 +289,7 @@ void Broadcast::stream_hls_url(const std::string& url) {
 void Broadcast::broadcast_chunk(const char* data, std::size_t size) {
     if (size == 0) return;
     bytes_total_.fetch_add(size, std::memory_order_relaxed);
+    if (size > 0) session_has_payload_ = true;
     // One probe per upstream: every client of this broadcast receives the same bytes, so
     // analysing them once says the same thing about all of them at a fraction of the cost.
     {
@@ -438,6 +451,8 @@ std::vector<BroadcastManager::StreamTransport> BroadcastManager::stream_transpor
             entry.bytes_sent += client->bytes_sent.load(std::memory_order_relaxed);
         }
         entry.recoveries = broadcast->recoveries();
+        entry.state = broadcast->state();
+        entry.generation = broadcast->generation();
         entry.counters = broadcast->transport();
         out.push_back(std::move(entry));
     }
