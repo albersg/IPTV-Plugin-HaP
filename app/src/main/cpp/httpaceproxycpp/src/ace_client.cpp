@@ -269,6 +269,27 @@ void AceClient::reader_loop() {
     cv_.notify_all();
 }
 
+void AceClient::reconnect() {
+    running_ = false;
+    {
+        std::lock_guard<std::mutex> lock(write_mutex_);
+        close_fd(fd_);
+    }
+    cv_.notify_all();
+    if (reader_.joinable() && reader_.get_id() != std::this_thread::get_id()) reader_.join();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        messages_.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(write_mutex_);
+        connect_socket();
+    }
+    running_ = true;
+    reader_ = std::thread(&AceClient::reader_loop, this);
+    authenticate();
+}
+
 void AceClient::write_line(const std::string& line) {
     // Security: this is the only path a command takes to the engine, and the engine
     // reads the stream line by line. A value carrying CR or LF - a channel name or a
@@ -280,7 +301,8 @@ void AceClient::write_line(const std::string& line) {
     }
     std::string data = line + "\r\n";
     log_line("DEBUG", "[" + title_ + "] >>> " + line);
-    if (!send_all_fd(fd_, data)) throw AceError("error writing data to AceEngine API port");
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    if (fd_ < 0 || !send_all_fd(fd_, data)) throw AceError("error writing data to AceEngine API port");
 }
 
 std::vector<std::string> AceClient::wait_for(const std::string& command, int timeout_seconds) {

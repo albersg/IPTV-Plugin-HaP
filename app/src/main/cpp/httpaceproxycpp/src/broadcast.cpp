@@ -209,8 +209,10 @@ void Broadcast::stream_loop() {
             std::lock_guard<std::mutex> lock(probe_mutex_);
             probe_.reset();
         }
+        // A fresh API connection per retry: the engine stops answering on the old one after a STOP,
+        // and reusing it made every retry time out on HELLOTS and START.
         try {
-            ace_->authenticate();
+            ace_->reconnect();
         } catch (const std::exception& e) {
             log_line("WARNING", "[" + infohash_.substr(0, 8) + "] re-auth failed: " + std::string(e.what()));
         }

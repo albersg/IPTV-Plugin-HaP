@@ -54,6 +54,15 @@ public:
      */
     void set_silence_watchdog(int seconds);
 
+    /**
+     * Opens a fresh API connection and authenticates it, replacing the current one.
+     *
+     * <p>Measured on the box: after a STOP the proxy issues itself, the engine keeps the socket open
+     * but stops answering - `HELLOTS` and `START` time out - so reusing it makes every retry fail. A
+     * new socket and a new HELLOBG is what lets the retry re-establish a session.
+     */
+    void reconnect();
+
 private:
     void connect_socket();
     void reader_loop();
@@ -70,6 +79,8 @@ private:
     std::atomic<bool> running_{false};
     std::thread reader_;
     mutable std::mutex mutex_;
+    /** Guards fd_: a retry replaces it while other threads may still send STOP or SHUTDOWN. */
+    std::mutex write_mutex_;
     std::condition_variable cv_;
     std::map<std::string, std::deque<std::vector<std::string>>> messages_;
     std::atomic<int> silent_seconds_{0};
