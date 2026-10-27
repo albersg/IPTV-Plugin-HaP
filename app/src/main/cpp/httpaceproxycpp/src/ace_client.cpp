@@ -1,4 +1,7 @@
 #include "httpaceproxycpp/ace_client.hpp"
+
+#include <algorithm>
+#include <chrono>
 #include "httpaceproxycpp/util.hpp"
 
 #include <arpa/inet.h>
@@ -157,6 +160,10 @@ Json AceClient::content_info(const std::map<std::string, std::string>& params) {
 }
 
 AceStartParams AceClient::start_broadcast(const std::map<std::string, std::string>& params) {
+    // A new session starts its own clock: silence from the previous one must not abort it.
+    last_progress_ms_ = 0;
+    prebuffering_ = false;
+    watchdog_tripped_ = false;
     write_line(command_start(params));
     auto msg = wait_for("START", config_.video_timeout);
     auto kv = parse_key_values(msg, 1);
@@ -195,6 +202,21 @@ void AceClient::stop_broadcast() {
     try { write_line("STOP"); } catch (...) {}
 }
 
+void AceClient::set_silence_watchdog(int seconds) {
+    silent_seconds_ = std::max(0, seconds);
+}
+
+namespace {
+
+/** Monotonic milliseconds, the clock the watchdog compares against. */
+std::int64_t monotonic_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+}
+
+} // namespace
+
 void AceClient::shutdown() {
     try { write_line("SHUTDOWN"); } catch (...) {}
 }
@@ -212,6 +234,27 @@ void AceClient::reader_loop() {
                 auto tokens = split_command_line(line);
                 if (!tokens.empty()) {
                     log_line("DEBUG", "[" + title_ + "] <<< " + url_decode(line));
+                    if (tokens[0] == "STATUS" && tokens.size() > 1) {
+                        const auto status = parse_status(tokens[1]);
+                        const bool progressing = status_indicates_progress(status);
+                        prebuffering_ = !progressing;
+                        if (progressing) {
+                            last_progress_ms_ = monotonic_ms();
+                        } else if (last_progress_ms_ == 0) {
+                            // The first status of a session starts the clock: a session is never
+                            // aborted for silence it inherited from before it existed.
+                            last_progress_ms_ = monotonic_ms();
+                        }
+                        if (should_end_silent_session(silent_seconds_.load(), prebuffering_,
+                                                      status_has_peers(status), monotonic_ms(),
+                                                      last_progress_ms_.load()) &&
+                            !watchdog_tripped_.exchange(true)) {
+                            log_line("WARNING", "[" + title_ + "] no engine progress for "
+                                    + std::to_string(silent_seconds_.load())
+                                    + " s; ending the session so the retry can run");
+                            stop_broadcast();
+                        }
+                    }
                     if (tokens[0] == "EVENT" && tokens.size() > 1 && tokens[1] == "getuserdata") {
                         write_line("USERDATA [{\"gender\": " + std::to_string(config_.ace_sex) + "}, {\"age\": " + std::to_string(config_.ace_age) + "}]");
                     }
@@ -253,7 +296,12 @@ std::vector<std::string> AceClient::wait_for(const std::string& command, int tim
 
 void AceClient::push_message(const std::vector<std::string>& tokens) {
     std::lock_guard<std::mutex> lock(mutex_);
-    messages_[tokens[0]].push_back(tokens);
+    auto& queue = messages_[tokens[0]];
+    queue.push_back(tokens);
+    // A streaming engine sends a STATUS line every second and nothing drains it while a broadcast
+    // runs, so the queue has to be bounded or it grows for the whole session.
+    constexpr std::size_t kMaxQueuedPerCommand = 256;
+    while (queue.size() > kMaxQueuedPerCommand) queue.pop_front();
     cv_.notify_all();
 }
 

@@ -18,6 +18,7 @@ add_library(httpaceproxy_core STATIC
     ${HTTPACE_CPP_DIR}/src/playlist.cpp
     ${HTTPACE_CPP_DIR}/src/plugins.cpp
     ${HTTPACE_CPP_DIR}/src/proxy.cpp
+    ${HTTPACE_CPP_DIR}/src/prebuffer_watchdog.cpp
     ${HTTPACE_CPP_DIR}/src/recovery_policy.cpp
     ${HTTPACE_CPP_DIR}/src/ts_probe.cpp
     ${HTTPACE_CPP_DIR}/src/util.cpp

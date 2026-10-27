@@ -61,6 +61,10 @@ Broadcast::Broadcast(std::string infohash, Config config, HttpClient& http_clien
       http_client_(http_client),
       start_params_(std::move(start_params)),
       ace_(std::make_shared<AceClient>(config_, "Broadcast_" + infohash_.substr(0, 8))) {
+    // Same switch as the retry: a watchdog with nothing to retry into would only shorten the
+    // session a client is watching.
+    ace_->set_silence_watchdog(
+            config_.stream_recovery_attempts > 0 ? kSilentPrebufferSeconds : 0);
     ace_->authenticate();
 }
 

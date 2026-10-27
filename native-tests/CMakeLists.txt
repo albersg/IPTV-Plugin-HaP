@@ -67,6 +67,15 @@ target_include_directories(httpace_recovery_policy_tests PRIVATE ${HTTPACE_CPP_D
 
 target_link_libraries(httpace_recovery_policy_tests PRIVATE GTest::gtest_main)
 
+add_executable(httpace_prebuffer_watchdog_tests
+    test_prebuffer_watchdog.cpp
+    ${HTTPACE_CPP_DIR}/src/prebuffer_watchdog.cpp
+)
+
+target_include_directories(httpace_prebuffer_watchdog_tests PRIVATE ${HTTPACE_CPP_DIR}/include)
+
+target_link_libraries(httpace_prebuffer_watchdog_tests PRIVATE GTest::gtest_main)
+
 add_executable(httpace_local_source_tests
     test_local_source.cpp
     ${HTTPACE_CPP_DIR}/src/local_source.cpp
@@ -84,4 +93,5 @@ gtest_discover_tests(httpace_util_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_chunk_parser_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_local_source_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_recovery_policy_tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(httpace_prebuffer_watchdog_tests DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(httpace_ts_probe_tests DISCOVERY_MODE PRE_TEST)
