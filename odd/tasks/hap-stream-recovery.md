@@ -32,6 +32,11 @@ leaving never retries.
 S6 — Observability: each broadcast counts its recoveries and `/status`/`/stat?action=get_clients`
 expose them as `recoveries`, so a comparative run does not depend on log scraping.
 
+S8 — A session that the engine accepts, that reports no peers and shows no progress for 20 s is
+ended so the retry can run; a session with peers is left to the engine's own window, because retrying
+a slow swarm restarts its prebuffer. Both live behind the recovery switch, so nothing changes with it
+off.
+
 S7 — A session that produces nothing must not hold the retry behind the full configured timeout: with
 recovery on, the upstream read timeout is the smaller of the configured value and 15 s, and it is never
 raised. Measured on the box, this does not shorten the *silent channel* case, because the engine ends
@@ -46,6 +51,7 @@ that session itself at ~30 s; it covers a socket that stalls without the engine 
 | R3 | Persisted switch, native config plumbing and the Ajustes panel | S2, S3 | parent | this commit |
 | R4 | Box run with the flag on: cold channel recovers, live channel does not falsely retry | S1, S5, S6 | parent | this commit |
 | R5 | Read timeout shortened while recovery is on, with four host tests | S7 | parent | this commit |
+| R6 | Peerless no-progress watchdog in the engine reader, with ten host tests | S8 | parent | this commit |
 
 ## Log
 
@@ -76,6 +82,16 @@ L5 — Flag off is the shipped state: one pass through the loop, `retry_backoff_
 
 L6 — Checks: native **81/81** (7 policy tests), JVM suite green with the panel mapping updated,
 `:app:assembleUniversalDebug` and `:app:lintArmv7Debug` green, signed release installed on the box.
+
+L10 — Watchdog on the box, 2026-10-27, flag on. Dead channel (`DAZN Baloncesto 1080p **`, 0 peers):
+`WARNING [Broadcast_d0924804] no engine progress for 20 s; ending the session so the retry can run`
+**23 s after the request** (the session itself started ~3 s in), then retries 1-3 and give-up 6 s
+later, with the client closed at **30.5 s** instead of the 80 s it used to wait. Healthy channel
+(`ALTITUDE SPORTS *`) in the same run: first byte 1.77 s, 25 MB in 26 s, **recoveries 0**, no watchdog
+line. Two things to know: the retries after a forced stop end in under a second each (the engine is
+still releasing the stopped session), so they burn in about six seconds; and a peerless channel that
+needs more than 20 s to find peers would be retried instead of waited for. Both are why the flag
+still ships off.
 
 L8 — Silent channel on the box, 2026-10-27, flag on: `DAZN Baloncesto 1080p **` returned headers in
 1.59 s and then sent **zero bytes**; the retry fired at **+30 s**, not +15 s, because the engine ends the

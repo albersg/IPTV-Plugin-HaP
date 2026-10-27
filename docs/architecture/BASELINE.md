@@ -15,7 +15,7 @@ the code or the command that proves it.
 | What | Command or file | Result |
 | --- | --- | --- |
 | JVM + Robolectric suite | `./gradlew :app:testUniversalDebugUnitTest` | **253 tests, 0 failures**, 29 files |
-| Native suite | `cmake -S native-tests -B build/native-tests && ctest --test-dir build/native-tests` | **85 tests, 0 failures** |
+| Native suite | `cmake -S native-tests -B build/native-tests && ctest --test-dir build/native-tests` | **97 tests, 0 failures** |
 | APK | `./gradlew :app:assembleUniversalDebug` | green, both ABIs |
 | Lint | `./gradlew :app:lintArmv7Debug` | green, 0 errors (133 warnings, none new-blocking) |
 | CI | `.github/workflows/native-tests.yml`, `build-apk.yml` | ctest + lint + release build; release requires the signing secrets |
@@ -66,7 +66,7 @@ the box has not been observed, or was observed before the current shell.
 
 | Capability | State |
 | --- | --- |
-| Bounded retry of the same upstream (`Ajustes → Recuperación de emisión`) | Implemented and **off by default**: 3 attempts, exponential backoff with deterministic jitter capped at 8 s, `recoveries` in `/status`, and a shortened upstream read timeout while it is on. Recovered a real cold channel on the box after 2 attempts (368,083 packets afterwards); no false retry on a healthy stream. Measured limit: a channel the engine never feeds still waits the engine's own ~30 s prebuffer window, because the engine ends that session before the reader does. Not yet a default: no player has been tested across a retry, and a retry restarts the session's PIDs, continuity and PCR. See `odd/tasks/hap-stream-recovery.md`. |
+| Bounded retry of the same upstream (`Ajustes → Recuperación de emisión`) | Implemented and **off by default**: 3 attempts, exponential backoff with deterministic jitter capped at 8 s, `recoveries` in `/status`, a shortened upstream read timeout and a peerless no-progress watchdog while it is on. Recovered a real cold channel on the box after 2 attempts (368,083 packets afterwards); no false retry on a healthy stream. Measured: the watchdog ends a peerless silent session 20 s in, and a healthy channel is untouched (`recoveries 0`). Limit: a peerless channel that needs more than 20 s to find peers would be retried instead of waited for. Not yet a default: no player has been tested across a retry, and a retry restarts the session's PIDs, continuity and PCR. See `odd/tasks/hap-stream-recovery.md`. |
 
 `HapDebugControlActivity` exists only in debug builds (`app/src/debug/AndroidManifest.xml`) and is not
 part of the product surface.

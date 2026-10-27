@@ -277,5 +277,7 @@ mucho ahorraría ~1,4 s en una vuelta, a cambio de dejar el motor encendido (39�
 ~280 MB) para un canal que nadie mira.
 
 En la misma sesión se midió la recuperación con la bandera encendida sobre un canal silencioso: el
-primer reintento llega tras **~30 s**, porque quien cierra la sesión es el motor, y el segundo vuelve a
-esperar lo mismo. El watchdog que falta no es de bytes: es de progreso cero en `STATUS`.
+primer reintento llegaba tras **~30 s**, porque quien cerraba la sesión era el motor. Con el vigilante
+de progreso cero (20 s, solo sin peers) el aviso aparece **23 s después de la petición** — la sesión
+empieza ~3 s después — y el cliente se cierra a los **30,5 s** en vez de esperar 80 s. El mismo día, el
+canal sano: primer byte 1,77 s, 25 MB en 26 s, **recoveries 0** y ninguna línea del vigilante.
